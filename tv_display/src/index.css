@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+
+:root {
+  /* Sri Lankan Government Official Colors */
+  --color-primary: #8b1c31; /* Maroon */
+  --color-primary-light: #a92a42;
+  --color-primary-dark: #631221;
+  --color-accent: #d4af37; /* Gold */
+  
+  --color-bg: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #475569;
+  --color-border: #e2e8f0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--color-text-primary);
+  background: 
+    linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(245, 247, 250, 0.7) 100%),
+    radial-gradient(circle at top right, rgba(212, 175, 55, 0.15), transparent 50%),
+    radial-gradient(circle at bottom left, rgba(139, 28, 49, 0.15), transparent 50%),
+    url('/bg.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  overflow: hidden; /* No scrolling on TV */
+  min-height: 100vh;
+}
+
+/* Layout Utilities */
+.tv-layout {
+  display: grid;
+  grid-template-rows: 100px 1fr 60px;
+  grid-template-columns: 2fr 1fr;
+  height: 100vh;
+  width: 100vw;
+}
+
+.tv-header {
+  grid-column: 1 / -1;
+  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 40px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  z-index: 10;
+}
+
+.tv-main {
+  grid-column: 1 / 2;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.tv-sidebar {
+  grid-column: 2 / 3;
+  background: rgba(255,255,255,0.9);
+  border-left: 2px solid var(--color-border);
+  padding: 40px;
+  box-shadow: -4px 0 12px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.tv-footer {
+  grid-column: 1 / -1;
+  background: var(--color-primary-dark);
+  color: white;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  font-size: 1.5rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.marquee {
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 20s linear infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Animations */
+@keyframes pulseToken {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
+  50% { transform: scale(1.02); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+}
+
+.pulse {
+  animation: pulseToken 1s ease-out 3; /* Pulses 3 times when a new token arrives */
+}
