@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/formal_card.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
+import 'booking_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,13 +30,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _bookToken() {
-    setState(() {
-      _hasActiveToken = true;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Token successfully booked for 10:00 AM - 11:00 AM slot.')),
+  void _bookToken() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BookingScreen(serviceName: _selectedService!),
+      ),
     );
+
+    if (result == true) {
+      setState(() {
+        _hasActiveToken = true;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Token successfully booked!')),
+        );
+      }
+    }
   }
 
   void _cancelToken() {
@@ -52,6 +65,15 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('GovQ Citizen Portal'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
@@ -207,15 +229,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 _selectedService = value;
                               });
                             },
-                          ),
-                          const SizedBox(height: 16),
-                          // Placeholder for Date & Time Picker
-                          const TextField(
-                            decoration: InputDecoration(
-                              labelText: 'Select Date',
-                              suffixIcon: Icon(Icons.calendar_today, color: AppTheme.primaryColor),
-                            ),
-                            readOnly: true,
                           ),
                           const SizedBox(height: 24),
                           ElevatedButton(

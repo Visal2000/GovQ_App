@@ -2,19 +2,22 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
-import 'home_screen.dart';
-import 'register_screen.dart';
+import 'login_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProviderStateMixin {
+  final _nameController = TextEditingController();
   final _nicController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   late AnimationController _bgController;
 
   @override
@@ -26,11 +29,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     )..repeat(reverse: true);
   }
 
-  void _login() {
-    if (_nicController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
+  void _register() {
+    if (_nameController.text.isNotEmpty &&
+        _nicController.text.isNotEmpty &&
+        _phoneController.text.isNotEmpty &&
+        _emailController.text.isNotEmpty &&
+        _passwordController.text.isNotEmpty &&
+        _passwordController.text == _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registration successful! Please login.')),
+      );
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all fields correctly.')),
       );
     }
   }
@@ -38,9 +53,49 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   void dispose() {
     _bgController.dispose();
+    _nameController.dispose();
     _nicController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Widget _buildCustomTextField({
+    required TextEditingController controller,
+    required String labelText,
+    required String hintText,
+    required IconData icon,
+    bool isPassword = false,
+    int delay = 0,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: isPassword,
+      style: const TextStyle(color: AppTheme.textPrimary),
+      decoration: InputDecoration(
+        labelText: labelText,
+        labelStyle: const TextStyle(color: AppTheme.textSecondary),
+        hintText: hintText,
+        hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+        prefixIcon: Icon(icon, color: AppTheme.primaryColor),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
+        ),
+      ),
+    ).animate().fade(duration: 500.ms, delay: delay.ms).slideX(begin: -0.1, end: 0, curve: Curves.easeOutQuad);
   }
 
   @override
@@ -50,6 +105,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: AppTheme.backgroundColor, // Official Light Base
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppTheme.primaryDark),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          },
+        ),
+      ),
       body: Stack(
         children: [
           // Elegant animated soft-blob background using Official Colors
@@ -61,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   // Blob 1 (Maroon)
                   Positioned(
                     top: -size.height * 0.1 + (100 * _bgController.value),
-                    left: -size.width * 0.2 + (50 * _bgController.value),
+                    right: -size.width * 0.2 + (50 * _bgController.value),
                     child: Container(
                       width: size.width * 0.8,
                       height: size.width * 0.8,
@@ -74,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   // Blob 2 (Gold)
                   Positioned(
                     bottom: -size.height * 0.1 - (100 * _bgController.value),
-                    right: -size.width * 0.2 - (50 * _bgController.value),
+                    left: -size.width * 0.2 - (50 * _bgController.value),
                     child: Container(
                       width: size.width * 0.7,
                       height: size.width * 0.7,
@@ -86,8 +154,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   ),
                   // Blob 3 (Light Maroon)
                   Positioned(
-                    top: size.height * 0.3 - (50 * _bgController.value),
-                    right: -size.width * 0.1 + (50 * _bgController.value),
+                    top: size.height * 0.4 - (50 * _bgController.value),
+                    left: -size.width * 0.1 + (50 * _bgController.value),
                     child: Container(
                       width: size.width * 0.6,
                       height: size.width * 0.6,
@@ -116,63 +184,32 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Logo with subtle official shadow
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryColor.withOpacity(0.2),
-                            blurRadius: 30,
-                            spreadRadius: 5,
-                            offset: const Offset(0, 10),
-                          )
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.account_balance, 
-                            size: 45, 
-                            color: AppTheme.primaryColor
-                          ),
-                        ),
-                      ),
-                    ).animate().scale(duration: 800.ms, curve: Curves.easeOutBack).fadeIn(duration: 800.ms),
-                    
-                    const SizedBox(height: 20),
-                    
                     // Title
                     Text(
-                      'GovQ Portal',
+                      'Join GovQ',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             color: AppTheme.primaryDark,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.2,
                           ),
-                    ).animate().fade(duration: 600.ms, delay: 200.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutQuad),
+                    ).animate().fade(duration: 600.ms, delay: 100.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutQuad),
                     
                     const SizedBox(height: 6),
                     Text(
-                      'Digital Citizen Services',
+                      'Register for Citizen Services',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: AppTheme.textSecondary,
                             letterSpacing: 0.5,
                           ),
-                    ).animate().fade(duration: 600.ms, delay: 300.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutQuad),
+                    ).animate().fade(duration: 600.ms, delay: 200.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutQuad),
                     
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
                     
-                    // Premium Official Glassmorphic Login Card
+                    // Premium Official Glassmorphic Registration Card
                     ClipRRect(
                       borderRadius: BorderRadius.circular(24),
                       child: BackdropFilter(
@@ -198,7 +235,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                'Sign In',
+                                'Create Account',
                                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                       color: AppTheme.primaryDark,
                                       fontWeight: FontWeight.w700,
@@ -208,68 +245,66 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               ),
                               const SizedBox(height: 28),
                               
-                              // Custom NIC Input
-                              TextFormField(
-                                controller: _nicController,
-                                style: const TextStyle(color: AppTheme.textPrimary),
-                                decoration: InputDecoration(
-                                  labelText: 'NIC Number',
-                                  labelStyle: const TextStyle(color: AppTheme.textSecondary),
-                                  hintText: 'Enter your NIC',
-                                  hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
-                                  prefixIcon: const Icon(Icons.badge_outlined, color: AppTheme.primaryColor),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
-                                  ),
-                                ),
-                              ).animate().fade(duration: 500.ms, delay: 400.ms).slideX(begin: -0.1, end: 0, curve: Curves.easeOutQuad),
-                              
+                              _buildCustomTextField(
+                                controller: _nameController,
+                                labelText: 'Full Name',
+                                hintText: 'Enter your full name',
+                                icon: Icons.person_outline,
+                                delay: 300,
+                              ),
                               const SizedBox(height: 16),
                               
-                              // Custom Password Input
-                              TextFormField(
+                              _buildCustomTextField(
+                                controller: _nicController,
+                                labelText: 'NIC Number',
+                                hintText: 'Enter your NIC',
+                                icon: Icons.badge_outlined,
+                                delay: 400,
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              _buildCustomTextField(
+                                controller: _phoneController,
+                                labelText: 'Phone Number',
+                                hintText: 'Enter your phone number',
+                                icon: Icons.phone_outlined,
+                                delay: 500,
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              _buildCustomTextField(
+                                controller: _emailController,
+                                labelText: 'Email Address',
+                                hintText: 'Enter your email address',
+                                icon: Icons.email_outlined,
+                                delay: 550,
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              _buildCustomTextField(
                                 controller: _passwordController,
-                                obscureText: true,
-                                style: const TextStyle(color: AppTheme.textPrimary),
-                                decoration: InputDecoration(
-                                  labelText: 'Password',
-                                  labelStyle: const TextStyle(color: AppTheme.textSecondary),
-                                  hintText: 'Enter your password',
-                                  hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
-                                  prefixIcon: const Icon(Icons.lock_outline, color: AppTheme.primaryColor),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
-                                  ),
-                                ),
-                              ).animate().fade(duration: 500.ms, delay: 500.ms).slideX(begin: -0.1, end: 0, curve: Curves.easeOutQuad),
+                                labelText: 'Password',
+                                hintText: 'Create a password',
+                                icon: Icons.lock_outline,
+                                isPassword: true,
+                                delay: 600,
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              _buildCustomTextField(
+                                controller: _confirmPasswordController,
+                                labelText: 'Confirm Password',
+                                hintText: 'Re-enter your password',
+                                icon: Icons.lock_outline,
+                                isPassword: true,
+                                delay: 700,
+                              ),
                               
                               const SizedBox(height: 32),
                               
-                              // Login Button
+                              // Register Button
                               ElevatedButton(
-                                onPressed: _login,
+                                onPressed: _register,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppTheme.primaryColor,
                                   foregroundColor: Colors.white,
@@ -281,35 +316,35 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   shadowColor: AppTheme.primaryColor.withOpacity(0.4),
                                 ),
                                 child: const Text(
-                                  'LOGIN',
+                                  'REGISTER',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w700, 
                                     letterSpacing: 1.2,
                                   ),
                                 ),
-                              ).animate().fade(duration: 500.ms, delay: 600.ms).scale(begin: const Offset(0.95, 0.95), curve: Curves.easeOutQuart),
+                              ).animate().fade(duration: 500.ms, delay: 800.ms).scale(begin: const Offset(0.95, 0.95), curve: Curves.easeOutQuart),
                               
                               const SizedBox(height: 24),
                               
-                              // Register Link
+                              // Login Link
                               TextButton(
                                 onPressed: () {
                                   Navigator.pushReplacement(
                                     context,
-                                    MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                                    MaterialPageRoute(builder: (context) => const LoginScreen()),
                                   );
                                 },
                                 style: TextButton.styleFrom(
                                   foregroundColor: AppTheme.primaryColor,
                                 ),
                                 child: const Text(
-                                  'New Citizen? Register Here',
+                                  'Already have an account? Sign In',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     decoration: TextDecoration.underline,
                                   ),
                                 ),
-                              ).animate().fade(duration: 500.ms, delay: 700.ms),
+                              ).animate().fade(duration: 500.ms, delay: 900.ms),
                             ],
                           ),
                         ),
