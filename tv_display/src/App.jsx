@@ -3,28 +3,32 @@ import Header from './components/Header';
 import MainDisplay from './components/MainDisplay';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
+import { db } from './firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 function App() {
   // Mock data representing state from Socket.IO
-  const [activeToken, setActiveToken] = useState({ token: 'A-045', counter: 3, service: 'NIC Renewal', timestamp: Date.now() });
+  const [activeToken, setActiveToken] = useState({ token: 'A-045', counter: '1', stageName: 'Document Submission', service: 'New ID - One Day Service', timestamp: Date.now() });
   const [nextTokens, setNextTokens] = useState([
-    { token: 'A-046', counter: 3 },
-    { token: 'B-012', counter: 1 },
-    { token: 'A-047', counter: 3 },
-    { token: 'C-088', counter: 2 },
+    { token: 'A-046', counter: '1', stageName: 'Document Submission' },
+    { token: 'B-012', counter: '4', stageName: 'Payment' },
+    { token: 'A-047', counter: '6', stageName: 'Final Collection' },
+    { token: 'C-088', counter: '1', stageName: 'Document Submission' },
   ]);
 
-  // Simulate a new token being called every 15 seconds for testing purposes
+  // Live Firestore Listener
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNextTokens((prev) => {
-        if (prev.length === 0) return prev;
-        const next = prev[0];
-        setActiveToken({ ...next, service: 'General Service', timestamp: Date.now() });
-        return prev.slice(1);
-      });
-    }, 15000);
-    return () => clearInterval(interval);
+    const unsub = onSnapshot(doc(db, 'queues', 'tv_display'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.activeToken) setActiveToken(data.activeToken);
+        if (data.nextTokens) setNextTokens(data.nextTokens);
+      }
+    }, (error) => {
+      console.error("Firebase listen error:", error);
+    });
+
+    return () => unsub();
   }, []);
 
   return (

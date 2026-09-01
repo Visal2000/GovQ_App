@@ -11,7 +11,7 @@ const MainDisplay = ({ activeToken }) => {
     // Trigger TTS
     if ('speechSynthesis' in window && activeToken) {
       window.speechSynthesis.cancel(); // Cancel any ongoing speech
-      const text = `Token number ${activeToken.token.replace('-', ' ')}, please proceed to Counter ${activeToken.counter}`;
+      const text = `Token number ${activeToken.token.replace('-', ' ')}, please proceed to Counter ${activeToken.counter}, for ${activeToken.stageName}`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.85; // Slightly slower for clarity
       utterance.pitch = 1;
@@ -51,7 +51,7 @@ const MainDisplay = ({ activeToken }) => {
         </h1>
         <div style={{ marginTop: '2rem', display: 'inline-block', background: 'var(--color-primary)', color: 'white', padding: '15px 40px', borderRadius: '50px' }}>
           <p style={{ fontSize: '2.5rem', margin: 0, fontWeight: 800 }}>
-            Counter {activeToken.counter}
+            Counter {activeToken.counter}: {activeToken.stageName}
           </p>
         </div>
         <p style={{ marginTop: '2rem', fontSize: '1.5rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>

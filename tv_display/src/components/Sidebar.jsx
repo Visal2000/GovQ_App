@@ -22,8 +22,8 @@ const Sidebar = ({ tokens }) => {
               {t.token}
             </span>
             <div style={{ textAlign: 'right' }}>
-              <span style={{ fontSize: '1.2rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600, display: 'block' }}>Counter</span>
-              <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--color-primary)' }}>{t.counter}</span>
+              <span style={{ fontSize: '1.2rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600, display: 'block' }}>Counter {t.counter}</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary)' }}>{t.stageName}</span>
             </div>
           </div>
         ))}
