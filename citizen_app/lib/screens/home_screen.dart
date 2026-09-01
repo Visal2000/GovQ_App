@@ -17,6 +17,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String? _selectedDepartment;
   String? _selectedService;
   bool _hasActiveToken = false;
+  bool _isBlocked = false;
+  bool _isCheckedIn = false;
   DateTime? _bookedDate;
   String? _bookedSlot;
   late AnimationController _bgController;
@@ -62,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (result is Map) {
       setState(() {
         _hasActiveToken = true;
+        _isCheckedIn = false;
         _bookedDate = result['date'];
         _bookedSlot = result['slot'];
       });
@@ -74,11 +77,88 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _cancelToken() {
+    // Simulate the 4-hour check
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Token'),
+        content: const Text('Is this cancellation being made at least 4 hours before your booked time slot?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Fail cancellation
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cancellation Failed: You cannot cancel a token within 4 hours of the scheduled time.'),
+                  backgroundColor: AppTheme.danger,
+                ),
+              );
+            },
+            child: const Text('No (Less than 4 hours)', style: TextStyle(color: AppTheme.danger)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _hasActiveToken = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Token cancelled successfully.')),
+              );
+            },
+            child: const Text('Yes (Cancel Token)', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _simulateNoShow() {
     setState(() {
       _hasActiveToken = false;
+      _isCheckedIn = false;
+      _isBlocked = true;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Token cancelled successfully.')),
+      const SnackBar(
+        content: Text('Simulated No-Show: Account blocked for 7 days.'),
+        backgroundColor: AppTheme.danger,
+      ),
+    );
+  }
+
+  void _checkIn() {
+    setState(() {
+      _isCheckedIn = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Checked In successfully. The counter has been notified.'),
+        backgroundColor: AppTheme.primaryColor,
+      ),
+    );
+  }
+
+  void _simulateCompleteToken() {
+    setState(() {
+      _hasActiveToken = false;
+      _isCheckedIn = false;
+    });
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Token Completed', style: TextStyle(color: AppTheme.primaryColor)),
+        content: const Text('The counter has finished processing your token. Your session is now closed.'),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -429,6 +509,45 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 ),
                               ],
                               const SizedBox(height: 24),
+                              
+                              if (isToday)
+                                if (!_isCheckedIn)
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: _checkIn,
+                                      icon: const Icon(Icons.how_to_reg, color: AppTheme.primaryDark),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.accentColor,
+                                        foregroundColor: AppTheme.primaryDark,
+                                        padding: const EdgeInsets.symmetric(vertical: 18),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        elevation: 5,
+                                      ),
+                                      label: const Text('I HAVE ARRIVED (CHECK-IN)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                                    ),
+                                  ).animate().fade().scale(delay: 200.ms)
+                                else
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: Colors.greenAccent),
+                                    ),
+                                    child: const Column(
+                                      children: [
+                                        Icon(Icons.check_circle, color: Colors.greenAccent, size: 32),
+                                        SizedBox(height: 8),
+                                        Text('Checked In', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                        SizedBox(height: 4),
+                                        Text('The counter has been notified. Please wait until your number is called.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
+                                      ],
+                                    ),
+                                  ).animate().fade().scale(),
+                                  
+                              const SizedBox(height: 16),
                               SizedBox(
                                 width: double.infinity,
                                 child: OutlinedButton(
@@ -440,12 +559,91 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   ),
                                   child: const Text('Cancel Token'),
                                 ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: _simulateNoShow,
+                                      style: TextButton.styleFrom(foregroundColor: AppTheme.accentLight),
+                                      child: const Text('Simulate No-Show', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: _simulateCompleteToken,
+                                      style: TextButton.styleFrom(foregroundColor: Colors.greenAccent),
+                                      child: const Text('Simulate Finish', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ),
+                                ],
                               )
                             ],
                           ),
                         ),
                       ),
                     ).animate().fade(duration: 600.ms).slideY(begin: 0.2, curve: Curves.easeOutQuart)
+                  else if (_isBlocked)
+                    // Blocked User Section
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                        child: Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: AppTheme.danger, width: 2),
+                            boxShadow: [
+                              BoxShadow(color: AppTheme.danger.withOpacity(0.15), blurRadius: 25, offset: const Offset(0, 10))
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.block, color: AppTheme.danger, size: 64),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Account Blocked',
+                                style: TextStyle(color: AppTheme.danger, fontSize: 24, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'You missed a scheduled appointment without cancelling it at least 4 hours in advance. As per government policy, you cannot book a new token for 7 days.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppTheme.primaryDark, fontSize: 15, height: 1.5),
+                              ),
+                              const SizedBox(height: 24),
+                              Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.danger.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Unblocks on: ${'7 days from now'}', // In a real app this would be a formatted date
+                                  style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _isBlocked = false;
+                                  });
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Block lifted (Debug).')),
+                                  );
+                                },
+                                child: const Text('Reset Block (Simulate Time Passed)', style: TextStyle(color: AppTheme.primaryColor)),
+                              )
+                            ],
+                          ),
+                        ),
+                      ),
+                    ).animate().fade(duration: 600.ms, delay: 200.ms).slideY(begin: 0.1, curve: Curves.easeOutQuart)
                   else
                     // New Booking Section
                     ClipRRect(
