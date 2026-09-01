@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
@@ -23,6 +24,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   DateTime? _bookedDate;
   String? _bookedSlot;
   late AnimationController _bgController;
+  
+  String _liveServingToken = '--';
+  String _liveNextToken = '--';
 
   final Map<String, List<String>> _departmentServices = {
     'Department of Registration of Persons (NIC)': [
@@ -40,6 +44,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this, 
       duration: const Duration(seconds: 25),
     )..repeat(reverse: true);
+
+    FirebaseFirestore.instance
+        .collection('queues')
+        .doc('tv_display')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        var data = snapshot.data()!;
+        setState(() {
+          _liveServingToken = data['activeToken']?['token'] ?? '--';
+          if (data['nextTokens'] != null && (data['nextTokens'] as List).isNotEmpty) {
+            _liveNextToken = data['nextTokens'][0]['token'] ?? '--';
+          } else {
+            _liveNextToken = '--';
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -466,19 +488,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   ),
                                   child: Column(
                                     children: [
-                                      const Row(
+                                      Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text('Currently Serving:', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                                          Text('A-102', style: TextStyle(color: AppTheme.accentLight, fontWeight: FontWeight.bold, fontSize: 18)),
+                                          const Text('Currently Serving:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                                          Text(_liveServingToken, style: const TextStyle(color: AppTheme.accentLight, fontWeight: FontWeight.bold, fontSize: 18)),
                                         ],
                                       ),
                                       const SizedBox(height: 8),
-                                      const Row(
+                                      Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text('Next Token:', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                                          Text('A-103', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                          const Text('Next Token:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                                          Text(_liveNextToken, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                                         ],
                                       ),
                                       const Padding(

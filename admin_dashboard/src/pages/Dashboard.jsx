@@ -1,24 +1,94 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import GlassCard from '../components/GlassCard';
 import { Play, Check, X, SkipForward, Users, Clock, AlertCircle } from 'lucide-react';
+import { db } from '../firebase';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 const Dashboard = () => {
-  const [activeCounter, setActiveCounter] = useState('Counter 1');
+  const [activeCounter, setActiveCounter] = useState('Counter 1 (Document Submission)');
   const [currentSlot] = useState('10:00 AM - 11:00 AM');
   
-  // Mock Data
-  const counters = ['Counter 1', 'Counter 2', 'Counter 3'];
-  const [servingToken, setServingToken] = useState('A-042');
-  const [nextToken, setNextToken] = useState('A-043');
+  // NIC Multi-Step Counters
+  const counters = ['Counter 1 (Document Submission)', 'Counter 4 (Payment)', 'Counter 6 (Collection)'];
+  const [servingToken, setServingToken] = useState('Loading...');
+  const [nextToken, setNextToken] = useState('Loading...');
 
-  const handleAction = (action) => {
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'queues', 'tv_display'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.activeToken?.token) {
+          setServingToken(data.activeToken.token);
+        }
+        if (data.nextTokens && data.nextTokens.length > 0) {
+          setNextToken(data.nextTokens[0].token);
+        }
+      } else {
+        // If DB is empty, set defaults
+        setServingToken('A-001');
+        setNextToken('A-002');
+        setDoc(doc(db, 'queues', 'tv_display'), {
+          activeToken: {
+            token: 'A-001',
+            counter: '1',
+            stageName: 'Document Submission',
+            service: 'New ID - One Day Service',
+            timestamp: Date.now()
+          },
+          nextTokens: [
+            { token: 'A-002', counter: '1', stageName: 'Document Submission' },
+            { token: 'A-003', counter: '4', stageName: 'Payment' }
+          ]
+        }).catch(console.error);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAction = async (action) => {
     console.log(`Action triggered: ${action}`);
-    // Simulate advancing queue
-    if (action === 'call' || action === 'skip' || action === 'complete') {
-      setServingToken(nextToken);
-      setNextToken(`A-0${parseInt(nextToken.split('-')[1]) + 1}`);
+    if (action === 'call' || action === 'skip' || action === 'complete' || action === 'next_stage') {
+      let currentNum = 1;
+      if (nextToken && nextToken.includes('-')) {
+        const parsed = parseInt(nextToken.split('-')[1]);
+        if (!isNaN(parsed)) currentNum = parsed;
+      }
+      const nextNum = currentNum + 1;
+      const newNextToken = `A-0${nextNum.toString().padStart(2, '0')}`;
+      
+      const tokenToServe = nextToken.startsWith('A') ? nextToken : 'A-002';
+
+      // We don't need to manually setState because the onSnapshot listener will do it instantly!
+      // But we will write to Firebase
+
+      try {
+        const stageName = activeCounter.includes('Document') ? 'Document Submission' : 
+                          activeCounter.includes('Payment') ? 'Payment' : 'Collection';
+                          
+        const counterNum = activeCounter.includes('Counter 1') ? '1' : 
+                           activeCounter.includes('Counter 4') ? '4' : '6';
+
+        await setDoc(doc(db, 'queues', 'tv_display'), {
+          activeToken: {
+            token: tokenToServe,
+            counter: counterNum,
+            stageName: stageName,
+            service: 'New ID - One Day Service',
+            timestamp: Date.now()
+          },
+          nextTokens: [
+            { token: newNextToken, counter: '1', stageName: 'Document Submission' },
+            { token: `A-0${(nextNum + 1).toString().padStart(2, '0')}`, counter: '4', stageName: 'Payment' },
+            { token: `A-0${(nextNum + 2).toString().padStart(2, '0')}`, counter: '6', stageName: 'Collection' },
+          ]
+        });
+      } catch (err) {
+        console.error("Firebase sync error:", err);
+      }
     }
   };
+
+  const isFinalCounter = activeCounter.includes('Collection');
 
   return (
     <div className="animate-fade-in">
@@ -79,10 +149,17 @@ const Dashboard = () => {
             Call Next Token
           </button>
           
-          <button className="btn btn-success" style={{ padding: '1rem 2rem', fontSize: '1.1rem' }} onClick={() => handleAction('complete')}>
-            <Check size={22} />
-            Mark Complete
-          </button>
+          {!isFinalCounter ? (
+            <button className="btn btn-success" style={{ padding: '1rem 2rem', fontSize: '1.1rem', backgroundColor: '#10b981' }} onClick={() => handleAction('next_stage')}>
+              <Check size={22} />
+              Process & Send to Next Stage
+            </button>
+          ) : (
+            <button className="btn btn-success" style={{ padding: '1rem 2rem', fontSize: '1.1rem' }} onClick={() => handleAction('complete')}>
+              <Check size={22} />
+              Finish & Close Token
+            </button>
+          )}
           
           <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.5rem' }}></div>
           
