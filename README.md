@@ -1,13 +1,21 @@
 # GovQ - Smart Queue Ticketing System for Government Offices
 
 ## Project Overview
-GovQ is a smart queue management system designed for Sri Lankan government offices. It replaces traditional "first-in, first-out" all-day queueing with an **hourly slot booking model**. This allows citizens to book a specific hour for their service, making arrival times more predictable, reducing physical waiting times, and preventing overcrowding.
+GovQ is a smart queue management system currently tailored for the **Department of Registration of Persons (NIC Office)** in Sri Lanka. It replaces traditional "first-in, first-out" all-day queueing with an **hourly slot booking model**. This allows citizens to book a specific hour for their service, making arrival times more predictable, reducing physical waiting times, and preventing overcrowding.
+
+### Multi-Step Workflow Model
+Government services (like One-Day ID Service) require visiting multiple counters in sequence:
+1. **Document Submission** (e.g., Counter 1) - ~5 mins
+2. **Payment** (e.g., Counter 4) - ~3-5 mins
+3. **Collection** (e.g., Counter 6)
+The system tracks the citizen's progress across these stages in real-time, calling them to the correct counter sequentially without them needing to re-queue manually.
 
 ### Key Business Rules:
 - **Hourly Slots:** Administrators define the capacity for each hour. Citizens book a token for a specific hour.
 - **4-Hour Cancellation Rule:** Citizens can only cancel a token if there are more than 4 hours remaining before their scheduled slot.
 - **7-Day No-Show Block:** If a citizen does not attend their booked slot and does not cancel legitimately, they are marked as a "no-show" and are blocked from booking further tokens for 7 days.
-- **Late Arrivals:** If a citizen arrives late but still within their booked hour, they are allowed to be served after the current on-time tokens in that hour are completed.
+- **Check-In Feature:** Citizens must "Check-In" upon arriving at the lobby. The option is only available when their booked hour arrives.
+- **Late Arrivals:** If a citizen arrives late but still within their booked hour, they check in and wait for the current on-time tokens in that hour to finish, maintaining flow without losing their opportunity.
 
 ## System Architecture (Three-Tier)
 The system is built as a distributed application with three front-end clients communicating with a shared backend.
