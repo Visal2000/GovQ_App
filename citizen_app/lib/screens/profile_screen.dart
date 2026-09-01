@@ -1,6 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
-import '../widgets/formal_card.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -10,12 +11,28 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   final _nameController = TextEditingController(text: 'Visal Hewage');
   final _phoneController = TextEditingController(text: '0712345678');
   
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
+  late AnimationController _bgController;
+
+  @override
+  void initState() {
+    super.initState();
+    _bgController = AnimationController(
+      vsync: this, 
+      duration: const Duration(seconds: 20),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _bgController.dispose();
+    super.dispose();
+  }
 
   void _updateProfile() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -42,10 +59,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.primaryColor)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning),
             onPressed: () {
               Navigator.pushAndRemoveUntil(
                 context,
@@ -53,7 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 (route) => false,
               );
             },
-            child: const Text('Deactivate'),
+            child: const Text('Deactivate', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -69,7 +86,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.primaryDark)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
@@ -80,120 +97,236 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 (route) => false,
               );
             },
-            child: const Text('Delete Forever'),
+            child: const Text('Delete Forever', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildGlassCard({required String title, required List<Widget> children, Color? borderColor}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: borderColor ?? Colors.white, width: 1.5),
+            boxShadow: [
+              BoxShadow(color: (borderColor ?? AppTheme.primaryColor).withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 5))
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: borderColor ?? AppTheme.primaryDark,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 20),
+              ...children,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool obscure = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscure,
+        style: const TextStyle(color: AppTheme.textPrimary),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: AppTheme.textSecondary),
+          prefixIcon: Icon(icon, color: AppTheme.primaryColor),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('My Profile'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: AppTheme.primaryDark),
+        title: const Text('My Profile', style: TextStyle(color: AppTheme.primaryDark, fontWeight: FontWeight.bold)),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            FormalCard(
+      body: Stack(
+        children: [
+          // Ambient Mesh Gradient Background
+          AnimatedBuilder(
+            animation: _bgController,
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  Positioned(
+                    top: -size.height * 0.1 + (80 * _bgController.value),
+                    left: -size.width * 0.1 - (50 * _bgController.value),
+                    child: Container(
+                      width: size.width * 0.9,
+                      height: size.width * 0.9,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.primaryColor.withOpacity(0.15),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: -size.height * 0.1 - (80 * _bgController.value),
+                    right: -size.width * 0.2 + (50 * _bgController.value),
+                    child: Container(
+                      width: size.width * 0.8,
+                      height: size.width * 0.8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.accentColor.withOpacity(0.2),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+              child: Container(color: Colors.white.withOpacity(0.5)),
+            ),
+          ),
+
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Profile Details',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      prefixIcon: Icon(Icons.person),
+                  
+                  // Profile Avatar
+                  Center(
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(color: AppTheme.primaryColor, width: 3),
+                        boxShadow: [
+                          BoxShadow(color: AppTheme.primaryColor.withOpacity(0.2), blurRadius: 20, offset: const Offset(0, 10))
+                        ],
+                      ),
+                      child: const Icon(Icons.person, size: 50, color: AppTheme.primaryColor),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _phoneController,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone Number',
-                      prefixIcon: Icon(Icons.phone),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _updateProfile,
-                    child: const Text('Update Profile'),
-                  ),
+                  ).animate().fade(duration: 500.ms).scale(),
+                  
+                  const SizedBox(height: 32),
+
+                  _buildGlassCard(
+                    title: 'Profile Details',
+                    children: [
+                      _buildTextField(_nameController, 'Full Name', Icons.person_outline),
+                      _buildTextField(_phoneController, 'Phone Number', Icons.phone_outlined),
+                      ElevatedButton(
+                        onPressed: _updateProfile,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Update Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ).animate().fade(delay: 200.ms).slideY(begin: 0.1),
+                  
+                  const SizedBox(height: 24),
+                  
+                  _buildGlassCard(
+                    title: 'Change Password',
+                    children: [
+                      _buildTextField(_currentPasswordController, 'Current Password', Icons.lock_outline, obscure: true),
+                      _buildTextField(_newPasswordController, 'New Password', Icons.lock_outline, obscure: true),
+                      ElevatedButton(
+                        onPressed: _changePassword,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryDark,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Change Password', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ).animate().fade(delay: 300.ms).slideY(begin: 0.1),
+                  
+                  const SizedBox(height: 24),
+                  
+                  _buildGlassCard(
+                    title: 'Account Management',
+                    borderColor: AppTheme.danger,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _deactivateAccount,
+                        icon: const Icon(Icons.pause_circle_outline, color: AppTheme.warning),
+                        label: const Text('Deactivate Account', style: TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppTheme.warning),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: _deleteAccount,
+                        icon: const Icon(Icons.delete_forever, color: AppTheme.danger),
+                        label: const Text('Permanently Delete Account', style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppTheme.danger),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                  ).animate().fade(delay: 400.ms).slideY(begin: 0.1),
+                  
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-            FormalCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Change Password',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _currentPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Current Password',
-                      prefixIcon: Icon(Icons.lock),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _newPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'New Password',
-                      prefixIcon: Icon(Icons.lock_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _changePassword,
-                    child: const Text('Change Password'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            FormalCard(
-              borderColor: AppTheme.danger,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Account Management',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: AppTheme.danger),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: _deactivateAccount,
-                    icon: const Icon(Icons.pause_circle_outline, color: AppTheme.warning),
-                    label: const Text('Deactivate Account', style: TextStyle(color: AppTheme.warning)),
-                    style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.warning)),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: _deleteAccount,
-                    icon: const Icon(Icons.delete_forever, color: AppTheme.danger),
-                    label: const Text('Permanently Delete Account', style: TextStyle(color: AppTheme.danger)),
-                    style: OutlinedButton.styleFrom(side: const BorderSide(color: AppTheme.danger)),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
