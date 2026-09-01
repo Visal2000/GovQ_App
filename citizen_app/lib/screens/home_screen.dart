@@ -19,14 +19,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _hasActiveToken = false;
   bool _isBlocked = false;
   bool _isCheckedIn = false;
+  int _currentStage = 0;
   DateTime? _bookedDate;
   String? _bookedSlot;
   late AnimationController _bgController;
 
   final Map<String, List<String>> _departmentServices = {
-    'Department of Motor Traffic': ['Driver\'s License Renewal', 'Vehicle Registration', 'Transfer of Ownership'],
-    'Department of Immigration': ['Passport Issuance', 'Visa Extension'],
-    'Registrar General\'s Department': ['Birth Certificate Copy', 'Marriage Registration'],
+    'Department of Registration of Persons (NIC)': [
+      'New ID - One Day Service',
+      'New ID - Normal Service',
+      'ID Renewal / Amendment',
+      'Lost ID Replacement'
+    ],
   };
 
   @override
@@ -132,19 +136,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _checkIn() {
     setState(() {
       _isCheckedIn = true;
+      _currentStage = 0; // Waiting in lobby
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Checked In successfully. The counter has been notified.'),
+        content: Text('Checked In successfully. The lobby display will call you shortly.'),
         backgroundColor: AppTheme.primaryColor,
       ),
     );
+  }
+
+  void _nextStage() {
+    if (_currentStage < 3) {
+      setState(() {
+        _currentStage++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Token called to Stage $_currentStage!'),
+          backgroundColor: AppTheme.accentColor,
+        ),
+      );
+    } else {
+      _simulateCompleteToken();
+    }
   }
 
   void _simulateCompleteToken() {
     setState(() {
       _hasActiveToken = false;
       _isCheckedIn = false;
+      _currentStage = 0;
     });
     showDialog(
       context: context,
@@ -532,17 +554,42 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.withOpacity(0.2),
+                                      color: _currentStage == 0 ? Colors.green.withOpacity(0.2) : AppTheme.accentColor.withOpacity(0.9),
                                       borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.greenAccent),
+                                      border: Border.all(color: _currentStage == 0 ? Colors.greenAccent : Colors.white),
                                     ),
-                                    child: const Column(
+                                    child: Column(
                                       children: [
-                                        Icon(Icons.check_circle, color: Colors.greenAccent, size: 32),
-                                        SizedBox(height: 8),
-                                        Text('Checked In', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                                        SizedBox(height: 4),
-                                        Text('The counter has been notified. Please wait until your number is called.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
+                                        Icon(
+                                          _currentStage == 0 ? Icons.check_circle : Icons.notifications_active, 
+                                          color: _currentStage == 0 ? Colors.greenAccent : AppTheme.primaryDark, 
+                                          size: 32
+                                        ).animate(target: _currentStage > 0 ? 1 : 0).shake(),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          _currentStage == 0 ? 'Checked In - Waiting in Lobby' : 'PROCEED TO COUNTER', 
+                                          style: TextStyle(
+                                            color: _currentStage == 0 ? Colors.white : AppTheme.primaryDark, 
+                                            fontWeight: FontWeight.bold, 
+                                            fontSize: 18
+                                          )
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          _currentStage == 0 
+                                            ? 'Please wait until your number is called for Document Submission.' 
+                                            : _currentStage == 1 
+                                              ? 'Counter 1: Document Submission\nPlease go to Counter 1 now.'
+                                              : _currentStage == 2
+                                                ? 'Counter 4: Payment\nPlease pay your processing fee.'
+                                                : 'Counter 6: Collection\nYour ID is ready for collection.', 
+                                          textAlign: TextAlign.center, 
+                                          style: TextStyle(
+                                            color: _currentStage == 0 ? Colors.white70 : AppTheme.primaryDark.withOpacity(0.8), 
+                                            fontSize: 14,
+                                            fontWeight: _currentStage > 0 ? FontWeight.bold : FontWeight.normal
+                                          )
+                                        ),
                                       ],
                                     ),
                                   ).animate().fade().scale(),
@@ -567,14 +614,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     child: TextButton(
                                       onPressed: _simulateNoShow,
                                       style: TextButton.styleFrom(foregroundColor: AppTheme.accentLight),
-                                      child: const Text('Simulate No-Show', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                                      child: const Text('No-Show', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
                                     ),
                                   ),
                                   Expanded(
                                     child: TextButton(
-                                      onPressed: _simulateCompleteToken,
-                                      style: TextButton.styleFrom(foregroundColor: Colors.greenAccent),
-                                      child: const Text('Simulate Finish', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                                      onPressed: _isCheckedIn ? _nextStage : null,
+                                      style: TextButton.styleFrom(foregroundColor: _isCheckedIn ? Colors.amberAccent : Colors.grey),
+                                      child: Text(_currentStage < 3 ? 'Simulate Next Counter' : 'Simulate Finish', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
                                     ),
                                   ),
                                 ],
