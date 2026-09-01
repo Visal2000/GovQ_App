@@ -68,8 +68,10 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
 
   void _confirmBooking() {
     if (_selectedDate != null && _selectedSlot != null) {
-      // Simulate booking confirmation and return true to HomeScreen
-      Navigator.pop(context, true);
+      Navigator.pop(context, {
+        'date': _selectedDate,
+        'slot': _selectedSlot,
+      });
     }
   }
 

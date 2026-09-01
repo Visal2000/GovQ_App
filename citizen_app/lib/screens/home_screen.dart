@@ -17,6 +17,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String? _selectedDepartment;
   String? _selectedService;
   bool _hasActiveToken = false;
+  DateTime? _bookedDate;
+  String? _bookedSlot;
   late AnimationController _bgController;
 
   final Map<String, List<String>> _departmentServices = {
@@ -57,9 +59,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
     );
 
-    if (result == true) {
+    if (result is Map) {
       setState(() {
         _hasActiveToken = true;
+        _bookedDate = result['date'];
+        _bookedSlot = result['slot'];
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -128,6 +132,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final bool isToday = _bookedDate != null && 
+                         _bookedDate!.year == DateTime.now().year && 
+                         _bookedDate!.month == DateTime.now().month && 
+                         _bookedDate!.day == DateTime.now().day;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -304,30 +312,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text(
-                                    'ACTIVE TOKEN',
+                                    'MY BOOKING',
                                     style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1.5),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white24,
-                                      borderRadius: BorderRadius.circular(12),
+                                  if (isToday)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white24,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Icon(Icons.circle, color: AppTheme.accentLight, size: 10),
+                                          SizedBox(width: 6),
+                                          Text('LIVE QUEUE', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ).animate(onPlay: (controller) => controller.repeat(reverse: true))
+                                     .fade(begin: 0.5, end: 1.0, duration: 1.seconds)
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white24,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Text('UPCOMING', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                                     ),
-                                    child: const Row(
-                                      children: [
-                                        Icon(Icons.circle, color: AppTheme.accentLight, size: 10),
-                                        SizedBox(width: 6),
-                                        Text('LIVE QUEUE', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                  ).animate(onPlay: (controller) => controller.repeat(reverse: true))
-                                   .fade(begin: 0.5, end: 1.0, duration: 1.seconds),
                                 ],
                               ),
                               const SizedBox(height: 16),
                               const Text(
-                                'Token: A-104',
-                                style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold),
+                                'Your Token: A-104',
+                                style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -335,34 +353,81 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
                               ),
                               const SizedBox(height: 24),
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(12),
+                              
+                              // Live Queue Status Section
+                              if (isToday) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      const Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('Currently Serving:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                                          Text('A-102', style: TextStyle(color: AppTheme.accentLight, fontWeight: FontWeight.bold, fontSize: 18)),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      const Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('Next Token:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                                          Text('A-103', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                        ],
+                                      ),
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 12.0),
+                                        child: Divider(color: Colors.white24, height: 1),
+                                      ),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text('Your Time Slot', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                              const SizedBox(height: 4),
+                                              Text(_bookedSlot ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                            ],
+                                          ),
+                                          const Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Text('Est. Wait', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                              SizedBox(height: 4),
+                                              Text('15 mins', style: TextStyle(color: AppTheme.accentLight, fontWeight: FontWeight.bold, fontSize: 16)),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Time Slot', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                                        SizedBox(height: 4),
-                                        Text('10:00 AM - 11:00', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text('Est. Wait', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                                        SizedBox(height: 4),
-                                        Text('45 mins', style: TextStyle(color: AppTheme.accentLight, fontWeight: FontWeight.bold, fontSize: 18)),
-                                      ],
-                                    ),
-                                  ],
+                              ] else ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline, color: AppTheme.accentLight),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Live queue tracking will be available here on ${_bookedDate?.day}/${_bookedDate?.month}/${_bookedDate?.year}.',
+                                          style: const TextStyle(color: Colors.white, height: 1.4),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              ],
                               const SizedBox(height: 24),
                               SizedBox(
                                 width: double.infinity,
