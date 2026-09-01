@@ -19,6 +19,7 @@ class AppTheme {
   // Status Colors
   static const Color success = Color(0xFF059669);
   static const Color danger = Color(0xFFDC2626);
+  static const Color warning = Color(0xFFF59E0B);
 
   static ThemeData get lightTheme {
     return ThemeData(
