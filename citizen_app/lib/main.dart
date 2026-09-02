@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
+import 'screens/home_screen.dart';
+import 'global.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,11 +24,17 @@ void main() async {
   } else {
     await Firebase.initializeApp();
   }
-  runApp(const GovQApp());
+
+  final prefs = await SharedPreferences.getInstance();
+  loggedInUserNIC = prefs.getString('loggedInUserNIC') ?? '';
+  loggedInUserName = prefs.getString('loggedInUserName') ?? '';
+
+  runApp(GovQApp(isLoggedIn: loggedInUserNIC.isNotEmpty));
 }
 
 class GovQApp extends StatelessWidget {
-  const GovQApp({super.key});
+  final bool isLoggedIn;
+  const GovQApp({super.key, required this.isLoggedIn});
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +42,7 @@ class GovQApp extends StatelessWidget {
       title: 'GovQ Citizen Portal',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const LoginScreen(),
+      home: isLoggedIn ? const HomeScreen() : const LoginScreen(),
     );
   }
 }

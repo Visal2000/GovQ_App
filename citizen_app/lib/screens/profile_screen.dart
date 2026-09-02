@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../global.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -12,8 +14,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
-  final _nameController = TextEditingController(text: 'Visal Hewage');
-  final _phoneController = TextEditingController(text: '0712345678');
+  final _nameController = TextEditingController(text: loggedInUserName);
+  final _phoneController = TextEditingController(text: loggedInUserNIC);
   
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
@@ -257,7 +259,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     title: 'Profile Details',
                     children: [
                       _buildTextField(_nameController, 'Full Name', Icons.person_outline),
-                      _buildTextField(_phoneController, 'Phone Number', Icons.phone_outlined),
+                      _buildTextField(_phoneController, 'NIC', Icons.badge_outlined),
                       ElevatedButton(
                         onPressed: _updateProfile,
                         style: ElevatedButton.styleFrom(
@@ -271,6 +273,108 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     ],
                   ).animate().fade(delay: 200.ms).slideY(begin: 0.1),
                   
+                  const SizedBox(height: 24),
+                  
+                  _buildGlassCard(
+                    title: 'My Booking History',
+                    children: [
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('tokens')
+                            .where('userNIC', isEqualTo: loggedInUserNIC)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          if (snapshot.hasError) {
+                            return const Text('Error loading history.');
+                          }
+                          
+                          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text('No booking history found.', style: TextStyle(color: AppTheme.textSecondary)),
+                            );
+                          }
+
+                          final docs = snapshot.data!.docs.toList();
+                          // Sort manually to avoid Firestore composite index requirement
+                          docs.sort((a, b) {
+                            final timeA = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                            final timeB = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                            if (timeA == null) return 1;
+                            if (timeB == null) return -1;
+                            return timeB.compareTo(timeA); // descending
+                          });
+
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: docs.length,
+                            itemBuilder: (context, index) {
+                              final data = docs[index].data() as Map<String, dynamic>;
+                              final token = data['token'] ?? '--';
+                              final service = data['service'] ?? 'Service';
+                              final dateStr = data['date'] != null ? data['date'].toString().split('T')[0] : '';
+                              final slot = data['slot'] ?? '';
+                              final status = data['status'] ?? 'waiting';
+                              
+                              Color statusColor;
+                              if (status == 'completed') statusColor = AppTheme.primaryColor;
+                              else if (status == 'skipped') statusColor = AppTheme.warning;
+                              else if (status == 'cancelled') statusColor = AppTheme.danger;
+                              else statusColor = Colors.blue;
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppTheme.borderColor.withOpacity(0.5)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: statusColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(token, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: statusColor)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(service, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                                          Text('$dateStr | $slot', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: statusColor,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        status.toUpperCase(),
+                                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ],
+                  ).animate().fade(delay: 250.ms).slideY(begin: 0.1),
+
                   const SizedBox(height: 24),
                   
                   _buildGlassCard(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../global.dart';
 
 class BookingScreen extends StatefulWidget {
   final String serviceName;
@@ -95,6 +96,7 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
           'timestamp': FieldValue.serverTimestamp(),
           'date': _selectedDate!.toIso8601String(),
           'slot': _selectedSlot,
+          'userNIC': loggedInUserNIC,
         });
 
         if (mounted) {

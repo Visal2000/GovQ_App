@@ -1,11 +1,15 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_screen.dart';
 import 'booking_screen.dart';
+import 'history_screen.dart';
+import '../global.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,9 +25,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isBlocked = false;
   bool _isCheckedIn = false;
   int _currentStage = 0;
+  bool _isLoadingToken = true;
   DateTime? _bookedDate;
   String? _bookedSlot;
   late AnimationController _bgController;
+  StreamSubscription<DocumentSnapshot>? _myTokenSubscription;
   
   String _liveServingToken = '--';
   String _liveNextToken = '--';
@@ -63,19 +69,101 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         });
       }
     });
+
+    _checkExistingToken();
+  }
+
+  Future<void> _checkExistingToken() async {
+    if (loggedInUserNIC.isEmpty) {
+      if (mounted) setState(() => _isLoadingToken = false);
+      return;
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('tokens')
+          .where('userNIC', isEqualTo: loggedInUserNIC)
+          .where('status', whereIn: ['waiting', 'serving'])
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final activeDoc = snapshot.docs.first;
+        final data = activeDoc.data();
+        
+        if (mounted) {
+          setState(() {
+            _hasActiveToken = true;
+            _myToken = data['token'] ?? _myToken;
+            _bookedSlot = data['slot'];
+            _selectedService = data['service']?.split(' - ').last ?? '';
+            _selectedDepartment = data['service']?.split(' - ').first ?? '';
+            if (data['date'] != null) {
+              _bookedDate = DateTime.parse(data['date']);
+            }
+          });
+          _listenToMyToken(_myToken);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking existing token: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingToken = false;
+        });
+      }
+    }
+  }
+
+  void _listenToMyToken(String tokenStr) {
+    _myTokenSubscription?.cancel();
+    _myTokenSubscription = FirebaseFirestore.instance
+        .collection('tokens')
+        .doc(tokenStr)
+        .snapshots()
+        .listen((snap) {
+      if (snap.exists && snap.data() != null) {
+        final data = snap.data()!;
+        if (data['status'] == 'completed' || 
+            data['status'] == 'skipped' || 
+            data['status'] == 'cancelled') {
+          setState(() {
+            _hasActiveToken = false;
+            _isCheckedIn = false;
+          });
+          _myTokenSubscription?.cancel();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Your token has been ${data['status']}.'),
+                backgroundColor: AppTheme.primaryColor,
+              ),
+            );
+          }
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
     _bgController.dispose();
+    _myTokenSubscription?.cancel();
     super.dispose();
   }
 
-  void _logout() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
+  void _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    loggedInUserNIC = '';
+    loggedInUserName = '';
+    
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
   }
 
   void _bookToken() async {
@@ -98,6 +186,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _myToken = result['token'];
         }
       });
+
+      _listenToMyToken(_myToken);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Token successfully booked!')),
@@ -309,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               title: const Text('Booking History'),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('History coming soon')));
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const HistoryScreen()));
               },
             ),
             ListTile(
@@ -417,8 +508,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   
                   const SizedBox(height: 32),
 
-                  // Real-Time Queue Status / Active Token (Glassmorphic)
-                  if (_hasActiveToken)
+                  if (_isLoadingToken)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40.0),
+                        child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                      ),
+                    )
+                  else if (_hasActiveToken)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: BackdropFilter(

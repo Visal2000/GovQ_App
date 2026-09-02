@@ -89,6 +89,27 @@ const Dashboard = () => {
     return () => unsub();
   }, [activeCounter, currentSlot]);
 
+  // Keep TV Display's "Up Next" live-synced with our waiting tokens
+  useEffect(() => {
+    const syncUpcoming = async () => {
+      if (waitingTokens.length > 0) {
+        const upcoming = waitingTokens.slice(0, 5).map(t => ({
+          token: t.token,
+          counter: '1',
+          stageName: 'Document Submission'
+        }));
+        try {
+          await updateDoc(doc(db, 'queues', 'tv_display'), {
+            nextTokens: upcoming
+          });
+        } catch(e) {
+          // Document might not exist yet, ignore
+        }
+      }
+    };
+    syncUpcoming();
+  }, [waitingTokens]);
+
   useEffect(() => {
     const counterNum = activeCounter.includes('Counter 1') ? '1' : 
                        activeCounter.includes('Counter 4') ? '4' : '6';
