@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 
@@ -26,11 +27,52 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     )..repeat(reverse: true);
   }
 
-  void _login() {
+  bool _isLoading = false;
+
+  Future<void> _login() async {
     if (_nicController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      setState(() { _isLoading = true; });
+      try {
+        final usersRef = FirebaseFirestore.instance.collection('users');
+        final doc = await usersRef.doc(_nicController.text).get();
+        
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>;
+          if (data['password'] == _passwordController.text) {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+              );
+            }
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Invalid password.'), backgroundColor: AppTheme.danger),
+              );
+            }
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Account not found. Please register.'), backgroundColor: AppTheme.danger),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.danger),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() { _isLoading = false; });
+        }
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter NIC and password.'), backgroundColor: AppTheme.danger),
       );
     }
   }
@@ -269,7 +311,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               
                               // Login Button
                               ElevatedButton(
-                                onPressed: _login,
+                                onPressed: _isLoading ? null : _login,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppTheme.primaryColor,
                                   foregroundColor: Colors.white,
@@ -279,14 +321,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   ),
                                   elevation: 5,
                                   shadowColor: AppTheme.primaryColor.withOpacity(0.4),
+                                  disabledBackgroundColor: AppTheme.primaryColor.withOpacity(0.5),
                                 ),
-                                child: const Text(
-                                  'LOGIN',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700, 
-                                    letterSpacing: 1.2,
-                                  ),
-                                ),
+                                child: _isLoading 
+                                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : const Text(
+                                      'LOGIN',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700, 
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
                               ).animate().fade(duration: 500.ms, delay: 600.ms).scale(begin: const Offset(0.95, 0.95), curve: Curves.easeOutQuart),
                               
                               const SizedBox(height: 24),

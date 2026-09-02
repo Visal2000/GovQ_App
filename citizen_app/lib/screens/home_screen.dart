@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   
   String _liveServingToken = '--';
   String _liveNextToken = '--';
+  String _myToken = 'A-104';
 
   final Map<String, List<String>> _departmentServices = {
     'Department of Registration of Persons (NIC)': [
@@ -93,6 +94,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _isCheckedIn = false;
         _bookedDate = result['date'];
         _bookedSlot = result['slot'];
+        if (result['token'] != null) {
+          _myToken = result['token'];
+        }
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -467,9 +471,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 ],
                               ),
                               const SizedBox(height: 16),
-                              const Text(
-                                'Your Token: A-104',
-                                style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                              Text(
+                                'Your Token: $_myToken',
+                                style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 8),
                               Text(

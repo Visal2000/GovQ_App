@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -29,23 +30,64 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     )..repeat(reverse: true);
   }
 
-  void _register() {
+  bool _isLoading = false;
+
+  Future<void> _register() async {
     if (_nameController.text.isNotEmpty &&
         _nicController.text.isNotEmpty &&
         _phoneController.text.isNotEmpty &&
         _emailController.text.isNotEmpty &&
         _passwordController.text.isNotEmpty &&
         _passwordController.text == _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registration successful! Please login.')),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
+      
+      setState(() { _isLoading = true; });
+
+      try {
+        final usersRef = FirebaseFirestore.instance.collection('users');
+        
+        // Check if NIC already exists
+        final doc = await usersRef.doc(_nicController.text).get();
+        if (doc.exists) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Account with this NIC already exists.'), backgroundColor: AppTheme.danger),
+            );
+          }
+        } else {
+          // Register the user
+          await usersRef.doc(_nicController.text).set({
+            'name': _nameController.text,
+            'nic': _nicController.text,
+            'phone': _phoneController.text,
+            'email': _emailController.text,
+            'password': _passwordController.text, // Normally this should be hashed, but for simplicity here we store it
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Registration successful! Please login.'), backgroundColor: AppTheme.success),
+            );
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.danger),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() { _isLoading = false; });
+        }
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields correctly.')),
+        const SnackBar(content: Text('Please fill all fields correctly.'), backgroundColor: AppTheme.danger),
       );
     }
   }
@@ -304,7 +346,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               // Register Button
                               ElevatedButton(
-                                onPressed: _register,
+                                onPressed: _isLoading ? null : _register,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppTheme.primaryColor,
                                   foregroundColor: Colors.white,
@@ -314,14 +356,17 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                   ),
                                   elevation: 5,
                                   shadowColor: AppTheme.primaryColor.withOpacity(0.4),
+                                  disabledBackgroundColor: AppTheme.primaryColor.withOpacity(0.5),
                                 ),
-                                child: const Text(
-                                  'REGISTER',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700, 
-                                    letterSpacing: 1.2,
-                                  ),
-                                ),
+                                child: _isLoading 
+                                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : const Text(
+                                      'REGISTER',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700, 
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
                               ).animate().fade(duration: 500.ms, delay: 800.ms).scale(begin: const Offset(0.95, 0.95), curve: Curves.easeOutQuart),
                               
                               const SizedBox(height: 24),

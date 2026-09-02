@@ -22,7 +22,6 @@ function App() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.activeToken) setActiveToken(data.activeToken);
-        if (data.nextTokens) setNextTokens(data.nextTokens);
       }
     }, (error) => {
       console.error("Firebase listen error:", error);
@@ -35,7 +34,6 @@ function App() {
     <div className="tv-layout">
       <Header />
       <MainDisplay activeToken={activeToken} />
-      <Sidebar tokens={nextTokens} />
       <Footer message="Welcome to GovQ. Please have your documents ready. Normal operating hours are 9:00 AM to 4:00 PM." />
     </div>
   );

@@ -2,89 +2,173 @@ import React, { useState, useEffect } from 'react';
 import GlassCard from '../components/GlassCard';
 import { Play, Check, X, SkipForward, Users, Clock, AlertCircle } from 'lucide-react';
 import { db } from '../firebase';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, collection, query, where, orderBy, updateDoc, getDocs } from 'firebase/firestore';
 
 const Dashboard = () => {
   const [activeCounter, setActiveCounter] = useState('Counter 1 (Document Submission)');
-  const [currentSlot] = useState('10:00 AM - 11:00 AM');
+  
+  const getCurrentSlot = () => {
+    const hour = new Date().getHours();
+    if (hour < 10) return '09:00 AM - 10:00 AM';
+    if (hour === 10) return '10:00 AM - 11:00 AM';
+    if (hour === 11) return '11:00 AM - 12:00 PM';
+    if (hour === 12) return '12:00 PM - 01:00 PM';
+    if (hour === 13) return '01:00 PM - 02:00 PM';
+    if (hour === 14) return '02:00 PM - 03:00 PM';
+    return '03:00 PM - 04:00 PM';
+  };
+
+  const [currentSlot, setCurrentSlot] = useState(getCurrentSlot());
+
+  // Update the time slot automatically if the dashboard is left open
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSlot(getCurrentSlot());
+    }, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
   
   // NIC Multi-Step Counters
   const counters = ['Counter 1 (Document Submission)', 'Counter 4 (Payment)', 'Counter 6 (Collection)'];
-  const [servingToken, setServingToken] = useState('Loading...');
-  const [nextToken, setNextToken] = useState('Loading...');
+  const [servingToken, setServingToken] = useState('--');
+  const [nextToken, setNextToken] = useState('--');
+  const [waitingTokens, setWaitingTokens] = useState([]);
+  const [activeSession, setActiveSession] = useState(null);
+  const [lateTokenInput, setLateTokenInput] = useState('');
+  const [lateTokensMsg, setLateTokensMsg] = useState([]);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'queues', 'tv_display'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.activeToken?.token) {
-          setServingToken(data.activeToken.token);
-        }
-        if (data.nextTokens && data.nextTokens.length > 0) {
-          setNextToken(data.nextTokens[0].token);
-        }
+    const stageName = activeCounter.includes('Document') ? 'Document Submission' : 
+                      activeCounter.includes('Payment') ? 'Payment' : 'Collection';
+
+    // Remove orderBy to avoid Firestore composite index requirement. Sort manually in JS.
+    const q = query(collection(db, 'tokens'), where('status', '==', 'waiting'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      let tokens = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => t.stageName === stageName);
+
+      // Important: For the very first stage, ONLY show tokens that belong to the current active hour slot.
+      // For later stages (Payment, Collection), show everyone because they are already inside the building progressing.
+      if (stageName === 'Document Submission') {
+        tokens = tokens.filter(t => t.slot && t.slot.startsWith(currentSlot));
+      }
+        
+      // Sort by timestamp manually (handle null timestamps which occur during serverTimestamp resolution)
+      tokens.sort((a, b) => {
+        const timeA = a.timestamp ? (a.timestamp.toMillis ? a.timestamp.toMillis() : a.timestamp) : 0;
+        const timeB = b.timestamp ? (b.timestamp.toMillis ? b.timestamp.toMillis() : b.timestamp) : 0;
+        return timeA - timeB;
+      });
+        
+      setWaitingTokens(tokens);
+      if (tokens.length > 0) {
+        setNextToken(tokens[0].token);
       } else {
-        // If DB is empty, set defaults
-        setServingToken('A-001');
-        setNextToken('A-002');
-        setDoc(doc(db, 'queues', 'tv_display'), {
-          activeToken: {
-            token: 'A-001',
-            counter: '1',
-            stageName: 'Document Submission',
-            service: 'New ID - One Day Service',
-            timestamp: Date.now()
-          },
-          nextTokens: [
-            { token: 'A-002', counter: '1', stageName: 'Document Submission' },
-            { token: 'A-003', counter: '4', stageName: 'Payment' }
-          ]
-        }).catch(console.error);
+        setNextToken('--');
+      }
+    }, (error) => {
+      console.error("Firestore Error in waitingTokens query: ", error);
+    });
+
+    return () => unsub();
+  }, [activeCounter, currentSlot]);
+
+  useEffect(() => {
+    const counterNum = activeCounter.includes('Counter 1') ? '1' : 
+                       activeCounter.includes('Counter 4') ? '4' : '6';
+
+    const qServing = query(collection(db, 'tokens'), where('status', '==', 'serving'));
+    const unsubServing = onSnapshot(qServing, (snapshot) => {
+      const active = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .find(t => t.counter === counterNum);
+      
+      if (active) {
+        setActiveSession(active);
+        setServingToken(active.token);
+      } else {
+        setActiveSession(null);
+        setServingToken('--');
       }
     });
-    return () => unsub();
-  }, []);
+
+    return () => unsubServing();
+  }, [activeCounter]);
 
   const handleAction = async (action) => {
-    console.log(`Action triggered: ${action}`);
-    if (action === 'call' || action === 'skip' || action === 'complete' || action === 'next_stage') {
-      let currentNum = 1;
-      if (nextToken && nextToken.includes('-')) {
-        const parsed = parseInt(nextToken.split('-')[1]);
-        if (!isNaN(parsed)) currentNum = parsed;
-      }
-      const nextNum = currentNum + 1;
-      const newNextToken = `A-0${nextNum.toString().padStart(2, '0')}`;
+    if (action === 'call') {
+      if (waitingTokens.length === 0) return;
+      const nextToServe = waitingTokens[0];
       
-      const tokenToServe = nextToken.startsWith('A') ? nextToken : 'A-002';
-
-      // We don't need to manually setState because the onSnapshot listener will do it instantly!
-      // But we will write to Firebase
+      const stageName = activeCounter.includes('Document') ? 'Document Submission' : 
+                        activeCounter.includes('Payment') ? 'Payment' : 'Collection';
+      const counterNum = activeCounter.includes('Counter 1') ? '1' : 
+                         activeCounter.includes('Counter 4') ? '4' : '6';
 
       try {
-        const stageName = activeCounter.includes('Document') ? 'Document Submission' : 
-                          activeCounter.includes('Payment') ? 'Payment' : 'Collection';
-                          
-        const counterNum = activeCounter.includes('Counter 1') ? '1' : 
-                           activeCounter.includes('Counter 4') ? '4' : '6';
+        await updateDoc(doc(db, 'tokens', nextToServe.id), { status: 'serving', counter: counterNum, stageName: stageName });
 
         await setDoc(doc(db, 'queues', 'tv_display'), {
           activeToken: {
-            token: tokenToServe,
+            token: nextToServe.token,
             counter: counterNum,
             stageName: stageName,
-            service: 'New ID - One Day Service',
+            service: nextToServe.service || 'New ID - One Day Service',
             timestamp: Date.now()
-          },
-          nextTokens: [
-            { token: newNextToken, counter: '1', stageName: 'Document Submission' },
-            { token: `A-0${(nextNum + 1).toString().padStart(2, '0')}`, counter: '4', stageName: 'Payment' },
-            { token: `A-0${(nextNum + 2).toString().padStart(2, '0')}`, counter: '6', stageName: 'Collection' },
-          ]
+          }
         });
       } catch (err) {
         console.error("Firebase sync error:", err);
       }
+    } else if (action === 'next_stage') {
+      if (!activeSession) return;
+      const nextStageName = activeCounter.includes('Document') ? 'Payment' : 'Collection';
+      try {
+        await updateDoc(doc(db, 'tokens', activeSession.id), { status: 'waiting', stageName: nextStageName });
+      } catch (err) { console.error(err); }
+    } else if (action === 'complete') {
+      if (!activeSession) return;
+      try {
+        await updateDoc(doc(db, 'tokens', activeSession.id), { status: 'completed' });
+      } catch (err) { console.error(err); }
+    } else if (action === 'skip' || action === 'cancel') {
+      if (!activeSession) return;
+      try {
+        await updateDoc(doc(db, 'tokens', activeSession.id), { status: action === 'skip' ? 'skipped' : 'cancelled' });
+      } catch (err) { console.error(err); }
+    }
+  };
+
+  const handleLateArrival = async () => {
+    if (!lateTokenInput.trim()) return;
+    
+    try {
+      const q = query(collection(db, 'tokens'), where('token', '==', lateTokenInput.trim().toUpperCase()));
+      const snap = await getDocs(q); 
+      
+      if (snap.empty) {
+        setLateTokensMsg(prev => [...prev, `Error: Token ${lateTokenInput} not found in database.`]);
+        return;
+      }
+
+      const docRef = snap.docs[0];
+      const stageName = activeCounter.includes('Document') ? 'Document Submission' : 
+                        activeCounter.includes('Payment') ? 'Payment' : 'Collection';
+
+      // Reactivate token and place at the end of the line
+      await updateDoc(doc(db, 'tokens', docRef.id), { 
+        status: 'waiting',
+        stageName: stageName,
+        timestamp: Date.now() // This moves them to the end of the orderBy('timestamp', 'asc') query
+      });
+
+      setLateTokensMsg(prev => [...prev, `Success: Token ${docRef.data().token} has been added to the end of the ${stageName} queue.`]);
+      setLateTokenInput('');
+      
+    } catch (err) {
+      console.error(err);
+      setLateTokensMsg(prev => [...prev, `Error: Could not process late arrival.`]);
     }
   };
 
@@ -176,10 +260,35 @@ const Dashboard = () => {
       </GlassCard>
       
       <div style={{ marginTop: '2rem' }}>
-         <GlassCard style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--color-warning-bg)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-            <AlertCircle size={20} color="var(--color-warning)" />
-            <span style={{ color: 'var(--color-text-primary)' }}>Token <strong>A-038</strong> arrived late and is waiting. They will be served after the current sequence.</span>
-         </GlassCard>
+        {waitingTokens.length === 0 && !activeSession ? (
+          <GlassCard style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', background: '#dcfce7', border: '1px solid #86efac' }}>
+            <Check size={28} color="#166534" />
+            <span style={{ color: '#166534', fontSize: '1.2rem', fontWeight: 600 }}>All tokens for this stage in the {currentSlot} slot are finished!</span>
+          </GlassCard>
+        ) : null}
+
+        <GlassCard style={{ padding: '1.5rem', marginTop: '1rem' }}>
+          <h4 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: 600 }}>Late Arrivals Handling</h4>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <input 
+              type="text" 
+              className="input-field" 
+              placeholder="Enter missed token (e.g. A-005)" 
+              value={lateTokenInput}
+              onChange={(e) => setLateTokenInput(e.target.value)}
+              style={{ maxWidth: '250px' }}
+            />
+            <button className="btn btn-secondary" onClick={handleLateArrival}>
+              Accept Late Arrival
+            </button>
+          </div>
+          {lateTokensMsg.length > 0 && (
+             <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--color-warning-bg)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '8px', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+               <AlertCircle size={20} color="var(--color-warning)" />
+               <span>{lateTokensMsg[lateTokensMsg.length - 1]}</span>
+             </div>
+          )}
+        </GlassCard>
       </div>
     </div>
   );
