@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../global.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
 
@@ -39,6 +41,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>;
           if (data['password'] == _passwordController.text) {
+            loggedInUserNIC = _nicController.text;
+            loggedInUserName = data['name'] ?? 'Citizen';
+
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('loggedInUserNIC', loggedInUserNIC);
+            await prefs.setString('loggedInUserName', loggedInUserName);
+
             if (mounted) {
               Navigator.pushReplacement(
                 context,
