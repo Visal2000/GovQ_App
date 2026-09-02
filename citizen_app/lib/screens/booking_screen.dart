@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BookingScreen extends StatefulWidget {
   final String serviceName;
@@ -66,12 +67,49 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
     }
   }
 
-  void _confirmBooking() {
+  bool _isBooking = false;
+
+  void _confirmBooking() async {
     if (_selectedDate != null && _selectedSlot != null) {
-      Navigator.pop(context, {
-        'date': _selectedDate,
-        'slot': _selectedSlot,
-      });
+      setState(() { _isBooking = true; });
+      try {
+        final tokensRef = FirebaseFirestore.instance.collection('tokens');
+        
+        String prefix = 'A';
+        if (_selectedSlot!.contains('09:00 AM')) prefix = 'A';
+        else if (_selectedSlot!.contains('10:00 AM')) prefix = 'B';
+        else if (_selectedSlot!.contains('11:00 AM')) prefix = 'C';
+        else if (_selectedSlot!.contains('01:00 PM')) prefix = 'D';
+        else if (_selectedSlot!.contains('02:00 PM')) prefix = 'E';
+
+        final querySnapshot = await tokensRef.where('slot', isEqualTo: _selectedSlot).get();
+        final count = querySnapshot.docs.length + 1;
+        final tokenStr = '$prefix-${count.toString().padLeft(3, '0')}';
+
+        await tokensRef.doc(tokenStr).set({
+          'token': tokenStr,
+          'service': widget.serviceName,
+          'status': 'waiting',
+          'counter': '1',
+          'stageName': 'Document Submission',
+          'timestamp': FieldValue.serverTimestamp(),
+          'date': _selectedDate!.toIso8601String(),
+          'slot': _selectedSlot,
+        });
+
+        if (mounted) {
+          Navigator.pop(context, {
+            'date': _selectedDate,
+            'slot': _selectedSlot,
+            'token': tokenStr,
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error booking token: $e')));
+        }
+        setState(() { _isBooking = false; });
+      }
     }
   }
 
@@ -310,7 +348,7 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
                   const SizedBox(height: 40),
                   
                   ElevatedButton(
-                    onPressed: (_selectedDate != null && _selectedSlot != null) ? _confirmBooking : null,
+                    onPressed: (_selectedDate != null && _selectedSlot != null && !_isBooking) ? _confirmBooking : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       foregroundColor: Colors.white,
@@ -319,7 +357,9 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
                       elevation: 5,
                       disabledBackgroundColor: AppTheme.primaryColor.withOpacity(0.3),
                     ),
-                    child: const Text('CONFIRM BOOKING', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                    child: _isBooking 
+                      ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('CONFIRM BOOKING', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                   ).animate().fade(delay: 400.ms).scale(begin: const Offset(0.9, 0.9)),
                   
                   const SizedBox(height: 24),
