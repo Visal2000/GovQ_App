@@ -1,0 +1,185 @@
+import React, { useState, useEffect } from 'react';
+import GlassCard from '../components/GlassCard';
+import { db } from '../firebase';
+import { collection, onSnapshot, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { Trash2, User, UserPlus, Settings, Shield } from 'lucide-react';
+
+const SuperAdmin = () => {
+  const [users, setUsers] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [activeTab, setActiveTab] = useState('users'); // 'users' or 'staff'
+  
+  // New Staff Form
+  const [newStaffUsername, setNewStaffUsername] = useState('');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState('counter');
+  const [newStaffCounter, setNewStaffCounter] = useState('Counter 1 (Document Submission)');
+
+  useEffect(() => {
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const unsubStaff = onSnapshot(collection(db, 'staff'), (snap) => {
+      setStaff(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => { unsubUsers(); unsubStaff(); };
+  }, []);
+
+  const handleDeleteUser = async (id) => {
+    if (window.confirm('Are you sure you want to terminate this user account?')) {
+      await deleteDoc(doc(db, 'users', id));
+    }
+  };
+
+  const handleDeleteStaff = async (id) => {
+    if (window.confirm('Are you sure you want to delete this staff login?')) {
+      await deleteDoc(doc(db, 'staff', id));
+    }
+  };
+
+  const handleCreateStaff = async (e) => {
+    e.preventDefault();
+    if (!newStaffUsername || !newStaffPassword) return;
+    
+    await setDoc(doc(db, 'staff', newStaffUsername), {
+      username: newStaffUsername,
+      password: newStaffPassword,
+      role: newStaffRole,
+      counter: newStaffRole === 'counter' ? newStaffCounter : null,
+      createdAt: Date.now()
+    });
+    
+    setNewStaffUsername('');
+    setNewStaffPassword('');
+    alert('Staff account created successfully!');
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div>
+          <h1 className="heading-lg">Super Admin Dashboard</h1>
+          <p className="text-sm">Manage Citizens and Counter Logins</p>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+        <button 
+          className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-secondary'}`} 
+          onClick={() => setActiveTab('users')}
+        >
+          <User size={18} /> Registered Citizens
+        </button>
+        <button 
+          className={`btn ${activeTab === 'staff' ? 'btn-primary' : 'btn-secondary'}`} 
+          onClick={() => setActiveTab('staff')}
+        >
+          <Shield size={18} /> Staff Logins
+        </button>
+      </div>
+
+      {activeTab === 'users' && (
+        <GlassCard style={{ padding: '2rem' }}>
+          <h2 className="heading-md" style={{ marginBottom: '1.5rem' }}>Registered Citizens ({users.length})</h2>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <th style={{ padding: '1rem' }}>NIC</th>
+                  <th style={{ padding: '1rem' }}>Name</th>
+                  <th style={{ padding: '1rem' }}>Phone</th>
+                  <th style={{ padding: '1rem' }}>Email</th>
+                  <th style={{ padding: '1rem' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(user => (
+                  <tr key={user.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '1rem', fontWeight: 'bold' }}>{user.id}</td>
+                    <td style={{ padding: '1rem' }}>{user.name}</td>
+                    <td style={{ padding: '1rem' }}>{user.phone}</td>
+                    <td style={{ padding: '1rem' }}>{user.email}</td>
+                    <td style={{ padding: '1rem' }}>
+                      <button className="btn btn-danger" style={{ padding: '0.5rem 1rem' }} onClick={() => handleDeleteUser(user.id)}>
+                        <Trash2 size={16} /> Terminate
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan="5" style={{ padding: '2rem', textAlign: 'center' }}>No citizens registered yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+      )}
+
+      {activeTab === 'staff' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+          <GlassCard style={{ padding: '2rem' }}>
+            <h2 className="heading-md" style={{ marginBottom: '1.5rem' }}>Create Staff Login</h2>
+            <form onSubmit={handleCreateStaff}>
+              <div className="input-group">
+                <label className="input-label">Username</label>
+                <input type="text" className="input-field" value={newStaffUsername} onChange={e => setNewStaffUsername(e.target.value)} required />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Password</label>
+                <input type="password" className="input-field" value={newStaffPassword} onChange={e => setNewStaffPassword(e.target.value)} required />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Role</label>
+                <select className="input-field" value={newStaffRole} onChange={e => setNewStaffRole(e.target.value)}>
+                  <option value="counter">Counter Officer</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              {newStaffRole === 'counter' && (
+                <div className="input-group">
+                  <label className="input-label">Assigned Counter</label>
+                  <select className="input-field" value={newStaffCounter} onChange={e => setNewStaffCounter(e.target.value)}>
+                    <option value="Counter 1 (Document Submission)">Counter 1 (Document Submission)</option>
+                  </select>
+                </div>
+              )}
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
+                <UserPlus size={18} /> Create Account
+              </button>
+            </form>
+          </GlassCard>
+
+          <GlassCard style={{ padding: '2rem' }}>
+            <h2 className="heading-md" style={{ marginBottom: '1.5rem' }}>Active Staff Logins</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+                <div>
+                  <strong>admin</strong> <span className="text-sm">(Default Super Admin)</span>
+                </div>
+                <Shield size={18} color="var(--color-primary)" />
+              </div>
+              
+              {staff.map(s => (
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold' }}>{s.username} <span style={{ fontWeight: 'normal', color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>({s.role})</span></div>
+                    {s.role === 'counter' && <div className="text-sm">{s.counter}</div>}
+                  </div>
+                  <button className="btn btn-danger" style={{ padding: '0.5rem' }} onClick={() => handleDeleteStaff(s.id)}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SuperAdmin;
