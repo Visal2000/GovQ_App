@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "712217903276",
+    "project_id": "govq-d6d0c",
+    "storage_bucket": "govq-d6d0c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:712217903276:android:3c875d32ac7770e081df09",
+        "android_client_info": {
+          "package_name": "com.example.citizen_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7ga0yf5lHXyCabY17wLAVP32XVEDNEIs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
