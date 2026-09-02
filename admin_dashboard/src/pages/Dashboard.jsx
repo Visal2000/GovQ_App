@@ -6,6 +6,20 @@ import { doc, setDoc, onSnapshot, collection, query, where, orderBy, updateDoc, 
 
 const Dashboard = () => {
   const [activeCounter, setActiveCounter] = useState('Counter 1 (Document Submission)');
+  const [userRole, setUserRole] = useState(null);
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('govq_user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      setUserRole(user.role);
+      if (user.role === 'counter' && user.counter) {
+        setActiveCounter(user.counter);
+      }
+    } else {
+      window.location.href = '/login';
+    }
+  }, []);
   
   const getCurrentSlot = () => {
     const hour = new Date().getHours();
@@ -20,16 +34,18 @@ const Dashboard = () => {
 
   const [currentSlot, setCurrentSlot] = useState(getCurrentSlot());
 
-  // Update the time slot automatically if the dashboard is left open
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentSlot(getCurrentSlot());
-    }, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, []);
+  const allSlots = [
+    '09:00 AM - 10:00 AM',
+    '10:00 AM - 11:00 AM',
+    '11:00 AM - 12:00 PM',
+    '12:00 PM - 01:00 PM',
+    '01:00 PM - 02:00 PM',
+    '02:00 PM - 03:00 PM',
+    '03:00 PM - 04:00 PM'
+  ];
   
-  // NIC Multi-Step Counters
-  const counters = ['Counter 1 (Document Submission)', 'Counter 4 (Payment)', 'Counter 6 (Collection)'];
+  // Single Counter Mode
+  const counters = ['Counter 1 (Document Submission)'];
   const [servingToken, setServingToken] = useState('--');
   const [nextToken, setNextToken] = useState('--');
   const [waitingTokens, setWaitingTokens] = useState([]);
@@ -38,8 +54,7 @@ const Dashboard = () => {
   const [lateTokensMsg, setLateTokensMsg] = useState([]);
 
   useEffect(() => {
-    const stageName = activeCounter.includes('Document') ? 'Document Submission' : 
-                      activeCounter.includes('Payment') ? 'Payment' : 'Collection';
+    const stageName = 'Document Submission';
 
     // Remove orderBy to avoid Firestore composite index requirement. Sort manually in JS.
     const q = query(collection(db, 'tokens'), where('status', '==', 'waiting'));
@@ -101,13 +116,17 @@ const Dashboard = () => {
       if (waitingTokens.length === 0) return;
       const nextToServe = waitingTokens[0];
       
-      const stageName = activeCounter.includes('Document') ? 'Document Submission' : 
-                        activeCounter.includes('Payment') ? 'Payment' : 'Collection';
-      const counterNum = activeCounter.includes('Counter 1') ? '1' : 
-                         activeCounter.includes('Counter 4') ? '4' : '6';
+      const stageName = 'Document Submission';
+      const counterNum = '1';
 
       try {
         await updateDoc(doc(db, 'tokens', nextToServe.id), { status: 'serving', counter: counterNum, stageName: stageName });
+
+        const upcoming = waitingTokens.slice(1, 5).map(t => ({
+          token: t.token,
+          counter: counterNum,
+          stageName: stageName
+        }));
 
         await setDoc(doc(db, 'queues', 'tv_display'), {
           activeToken: {
@@ -116,17 +135,12 @@ const Dashboard = () => {
             stageName: stageName,
             service: nextToServe.service || 'New ID - One Day Service',
             timestamp: Date.now()
-          }
+          },
+          nextTokens: upcoming
         });
       } catch (err) {
         console.error("Firebase sync error:", err);
       }
-    } else if (action === 'next_stage') {
-      if (!activeSession) return;
-      const nextStageName = activeCounter.includes('Document') ? 'Payment' : 'Collection';
-      try {
-        await updateDoc(doc(db, 'tokens', activeSession.id), { status: 'waiting', stageName: nextStageName });
-      } catch (err) { console.error(err); }
     } else if (action === 'complete') {
       if (!activeSession) return;
       try {
@@ -187,6 +201,7 @@ const Dashboard = () => {
             value={activeCounter} 
             onChange={(e) => setActiveCounter(e.target.value)}
             style={{ minWidth: '150px' }}
+            disabled={userRole === 'counter'}
           >
             {counters.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -200,7 +215,16 @@ const Dashboard = () => {
             <Clock size={24} />
             <h3 className="heading-md" style={{ marginBottom: 0 }}>Active Slot</h3>
           </div>
-          <p style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>{currentSlot}</p>
+          <select 
+            className="input-field"
+            value={currentSlot}
+            onChange={(e) => setCurrentSlot(e.target.value)}
+            style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem', width: '100%', padding: '0.5rem', appearance: 'auto' }}
+          >
+            {allSlots.map(slot => (
+              <option key={slot} value={slot}>{slot}</option>
+            ))}
+          </select>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
             <span className="text-sm">Capacity: 45/50 Tokens</span>
             <div style={{ height: '6px', background: 'var(--color-border)', borderRadius: '3px', flex: 1, marginLeft: '1rem', overflow: 'hidden' }}>
@@ -233,17 +257,10 @@ const Dashboard = () => {
             Call Next Token
           </button>
           
-          {!isFinalCounter ? (
-            <button className="btn btn-success" style={{ padding: '1rem 2rem', fontSize: '1.1rem', backgroundColor: '#10b981' }} onClick={() => handleAction('next_stage')}>
-              <Check size={22} />
-              Process & Send to Next Stage
-            </button>
-          ) : (
-            <button className="btn btn-success" style={{ padding: '1rem 2rem', fontSize: '1.1rem' }} onClick={() => handleAction('complete')}>
-              <Check size={22} />
-              Finish & Close Token
-            </button>
-          )}
+          <button className="btn btn-success" style={{ padding: '1rem 2rem', fontSize: '1.1rem' }} onClick={() => handleAction('complete')}>
+            <Check size={22} />
+            Finish & Close Token
+          </button>
           
           <div style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.5rem' }}></div>
           

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const MainDisplay = ({ activeToken }) => {
+const MainDisplay = ({ activeToken, nextTokens = [] }) => {
   const [pulse, setPulse] = useState(false);
 
   useEffect(() => {
@@ -58,6 +58,15 @@ const MainDisplay = ({ activeToken }) => {
           {activeToken.service}
         </p>
       </div>
+      
+      {nextTokens.length > 0 && (
+        <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '1.5rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Up Next</h3>
+          <div style={{ background: 'white', padding: '15px 40px', borderRadius: '12px', border: '2px solid var(--color-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <span style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--color-primary)' }}>{nextTokens[0].token}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,17 +2,50 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '../components/GlassCard';
 import { LogIn } from 'lucide-react';
+import { db } from '../firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // Placeholder login logic
-    if (username && password) {
-      navigate('/');
+    if (!username || !password) return;
+
+    setLoading(true);
+    
+    // Default Super Admin Login
+    if (username === 'admin' && password === 'admin123') {
+      localStorage.setItem('govq_user', JSON.stringify({ role: 'admin', username: 'admin' }));
+      window.location.href = '/admin'; // Force reload to update sidebar state
+      return;
+    }
+
+    try {
+      const q = query(collection(db, 'staff'), where('username', '==', username), where('password', '==', password));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        const userData = snap.docs[0].data();
+        localStorage.setItem('govq_user', JSON.stringify({ role: userData.role, username, counter: userData.counter }));
+        
+        if (userData.role === 'admin') {
+          window.location.href = '/admin';
+        } else {
+          window.location.href = '/';
+        }
+      } else {
+        alert('Invalid credentials. Account not found.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error during login.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -50,9 +83,9 @@ const Login = () => {
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', fontSize: '1rem' }}>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', fontSize: '1rem' }} disabled={loading}>
             <LogIn size={20} />
-            Sign In
+            {loading ? 'Authenticating...' : 'Sign In'}
           </button>
         </form>
       </GlassCard>
