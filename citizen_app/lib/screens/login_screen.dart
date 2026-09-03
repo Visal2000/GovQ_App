@@ -32,58 +32,187 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _isLoading = false;
 
   Future<void> _login() async {
-    if (_nicController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
-      setState(() { _isLoading = true; });
-      try {
-        final usersRef = FirebaseFirestore.instance.collection('users');
-        final doc = await usersRef.doc(_nicController.text).get();
-        
-        if (doc.exists) {
-          final data = doc.data() as Map<String, dynamic>;
-          if (data['password'] == _passwordController.text) {
-            loggedInUserNIC = _nicController.text;
-            loggedInUserName = data['name'] ?? 'Citizen';
+    final nic = _nicController.text.trim();
+    final password = _passwordController.text.trim();
 
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('loggedInUserNIC', loggedInUserNIC);
-            await prefs.setString('loggedInUserName', loggedInUserName);
+    if (nic.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter NIC and password.'), backgroundColor: AppTheme.danger),
+      );
+      return;
+    }
 
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
-              );
-            }
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Invalid password.'), backgroundColor: AppTheme.danger),
-              );
-            }
+    if (!RegExp(r'^([0-9]{9}[vVxX]|[0-9]{12})$').hasMatch(nic)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid NIC format. Enter 9 digits + V/X or 12 digits.'), backgroundColor: AppTheme.warning),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 6 characters.'), backgroundColor: AppTheme.warning),
+      );
+      return;
+    }
+
+    setState(() { _isLoading = true; });
+    try {
+      final usersRef = FirebaseFirestore.instance.collection('users');
+      final doc = await usersRef.doc(nic).get();
+      
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data['password'] == password) {
+          loggedInUserNIC = nic;
+          loggedInUserName = data['name'] ?? 'Citizen';
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('loggedInUserNIC', loggedInUserNIC);
+          await prefs.setString('loggedInUserName', loggedInUserName);
+
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
           }
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Account not found. Please register.'), backgroundColor: AppTheme.danger),
+              const SnackBar(content: Text('Invalid password.'), backgroundColor: AppTheme.danger),
             );
           }
         }
-      } catch (e) {
+      } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.danger),
+            const SnackBar(content: Text('Account not found. Please register.'), backgroundColor: AppTheme.danger),
           );
         }
-      } finally {
-        if (mounted) {
-          setState(() { _isLoading = false; });
-        }
       }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter NIC and password.'), backgroundColor: AppTheme.danger),
-      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() { _isLoading = false; });
+      }
     }
+  }
+
+  void _showForgotPasswordDialog() {
+    final nicResetController = TextEditingController();
+    final phoneResetController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    bool isVerifying = false;
+    bool isVerified = false;
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Reset Password'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isVerified) ...[
+                      const Text('Enter your NIC and registered phone number to verify your identity.'),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: nicResetController,
+                        decoration: const InputDecoration(labelText: 'NIC Number', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: phoneResetController,
+                        decoration: const InputDecoration(labelText: 'Phone Number (e.g. 0771234567)', border: OutlineInputBorder()),
+                        keyboardType: TextInputType.phone,
+                      ),
+                    ] else ...[
+                      const Text('Identity verified. Please enter your new password.'),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: newPasswordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isVerifying ? null : () async {
+                    if (!isVerified) {
+                      final nic = nicResetController.text.trim();
+                      final phone = phoneResetController.text.trim();
+                      if (nic.isEmpty || phone.isEmpty) return;
+                      
+                      setDialogState(() => isVerifying = true);
+                      try {
+                        final doc = await FirebaseFirestore.instance.collection('users').doc(nic).get();
+                        if (doc.exists && doc.data()?['phone'] == phone) {
+                          setDialogState(() {
+                            isVerified = true;
+                            isVerifying = false;
+                          });
+                        } else {
+                          setDialogState(() => isVerifying = false);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Details do not match our records.'), backgroundColor: AppTheme.danger),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        setDialogState(() => isVerifying = false);
+                      }
+                    } else {
+                      final newPass = newPasswordController.text.trim();
+                      if (newPass.length < 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Password must be at least 6 characters.'), backgroundColor: AppTheme.warning),
+                        );
+                        return;
+                      }
+                      
+                      setDialogState(() => isVerifying = true);
+                      try {
+                        await FirebaseFirestore.instance.collection('users').doc(nicResetController.text.trim()).update({
+                          'password': newPass,
+                        });
+                        if (mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Password reset successfully! You can now log in.'), backgroundColor: AppTheme.success),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isVerifying = false);
+                      }
+                    }
+                  },
+                  child: isVerifying 
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
+                      : Text(isVerified ? 'Reset Password' : 'Verify Identity'),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
   }
 
   @override
@@ -316,7 +445,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 ),
                               ).animate().fade(duration: 500.ms, delay: 500.ms).slideX(begin: -0.1, end: 0, curve: Curves.easeOutQuad),
                               
-                              const SizedBox(height: 32),
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: _showForgotPasswordDialog,
+                                  style: TextButton.styleFrom(foregroundColor: AppTheme.primaryColor),
+                                  child: const Text('Forgot Password?', style: TextStyle(fontWeight: FontWeight.w600)),
+                                ),
+                              ).animate().fade(duration: 500.ms, delay: 550.ms),
+                              
+                              const SizedBox(height: 16),
                               
                               // Login Button
                               ElevatedButton(
