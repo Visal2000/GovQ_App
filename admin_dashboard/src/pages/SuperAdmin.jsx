@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import GlassCard from '../components/GlassCard';
 import { db } from '../firebase';
-import { collection, onSnapshot, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, deleteDoc, doc, setDoc, deleteField } from 'firebase/firestore';
 import { Trash2, User, UserPlus, Settings, Shield } from 'lucide-react';
 
 const SuperAdmin = () => {
   const [users, setUsers] = useState([]);
   const [staff, setStaff] = useState([]);
-  const [activeTab, setActiveTab] = useState('users'); // 'users' or 'staff'
+  const [activeTab, setActiveTab] = useState('users'); // 'users', 'staff', 'appeals'
   
   // New Staff Form
   const [newStaffUsername, setNewStaffUsername] = useState('');
@@ -36,6 +36,23 @@ const SuperAdmin = () => {
   const handleDeleteStaff = async (id) => {
     if (window.confirm('Are you sure you want to delete this staff login?')) {
       await deleteDoc(doc(db, 'staff', id));
+    }
+  };
+
+  const handleAppealDecision = async (nic, decision) => {
+    try {
+      if (decision === 'accepted') {
+        await setDoc(doc(db, 'users', nic), {
+          appealStatus: 'accepted',
+          blockedUntil: deleteField()
+        }, { merge: true });
+      } else {
+        await setDoc(doc(db, 'users', nic), {
+          appealStatus: 'rejected'
+        }, { merge: true });
+      }
+    } catch(e) {
+      console.error("Error updating appeal: ", e);
     }
   };
 
@@ -77,6 +94,12 @@ const SuperAdmin = () => {
           onClick={() => setActiveTab('staff')}
         >
           <Shield size={18} /> Staff Logins
+        </button>
+        <button 
+          className={`btn ${activeTab === 'appeals' ? 'btn-primary' : 'btn-secondary'}`} 
+          onClick={() => setActiveTab('appeals')}
+        >
+          <Shield size={18} /> Ban Appeals
         </button>
       </div>
 
@@ -177,6 +200,45 @@ const SuperAdmin = () => {
             </div>
           </GlassCard>
         </div>
+      )}
+
+      {activeTab === 'appeals' && (
+        <GlassCard style={{ padding: '2rem' }}>
+          <h2 className="heading-md" style={{ marginBottom: '1.5rem', color: 'var(--color-warning)' }}>Pending 7-Day Ban Appeals</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {users.filter(u => u.appealStatus === 'pending').map(appeal => (
+              <div key={appeal.id} style={{ padding: '1rem', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--color-text-dark)', marginBottom: '0.25rem' }}>NIC: {appeal.id} | Name: {appeal.name} | Phone: {appeal.phone}</div>
+                  <div style={{ color: 'var(--color-text-light)', fontSize: '0.9rem' }}>
+                    <span style={{ fontWeight: 500 }}>Reason:</span> {appeal.appealReason || 'No reason provided'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button 
+                    className="btn" 
+                    style={{ background: '#ef4444', color: 'white', padding: '0.5rem 1rem' }}
+                    onClick={() => handleAppealDecision(appeal.id, 'rejected')}
+                  >
+                    Reject
+                  </button>
+                  <button 
+                    className="btn" 
+                    style={{ background: '#22c55e', color: 'white', padding: '0.5rem 1rem' }}
+                    onClick={() => handleAppealDecision(appeal.id, 'accepted')}
+                  >
+                    Accept (Unban)
+                  </button>
+                </div>
+              </div>
+            ))}
+            {users.filter(u => u.appealStatus === 'pending').length === 0 && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-light)' }}>
+                No pending appeals at the moment.
+              </div>
+            )}
+          </div>
+        </GlassCard>
       )}
     </div>
   );
