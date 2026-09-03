@@ -115,19 +115,17 @@ const Dashboard = () => {
   // Keep TV Display's "Up Next" live-synced with our waiting tokens
   useEffect(() => {
     const syncUpcoming = async () => {
-      if (waitingTokens.length > 0) {
-        const upcoming = waitingTokens.slice(0, 5).map(t => ({
-          token: t.token,
-          counter: '1',
-          stageName: 'Document Submission'
-        }));
-        try {
-          await updateDoc(doc(db, 'queues', 'tv_display'), {
-            nextTokens: upcoming
-          });
-        } catch(e) {
-          // Document might not exist yet, ignore
-        }
+      const upcoming = waitingTokens.slice(0, 5).map(t => ({
+        token: t.token,
+        counter: '1',
+        stageName: 'Document Submission'
+      }));
+      try {
+        await updateDoc(doc(db, 'queues', 'tv_display'), {
+          nextTokens: upcoming
+        });
+      } catch(e) {
+        // Document might not exist yet, ignore
       }
     };
     syncUpcoming();
@@ -138,6 +136,7 @@ const Dashboard = () => {
                        activeCounter.includes('Counter 4') ? '4' : '6';
 
     const qServing = query(collection(db, 'tokens'), where('status', '==', 'serving'));
+
     const unsubServing = onSnapshot(qServing, (snapshot) => {
       const active = snapshot.docs
         .map(d => ({ id: d.id, ...d.data() }))
@@ -189,11 +188,13 @@ const Dashboard = () => {
       if (!activeSession) return;
       try {
         await updateDoc(doc(db, 'tokens', activeSession.id), { status: 'completed' });
+        await setDoc(doc(db, 'queues', 'tv_display'), { activeToken: null }, { merge: true });
       } catch (err) { console.error(err); }
     } else if (action === 'skip' || action === 'cancel') {
       if (!activeSession) return;
       try {
         await updateDoc(doc(db, 'tokens', activeSession.id), { status: action === 'skip' ? 'skipped' : 'cancelled' });
+        await setDoc(doc(db, 'queues', 'tv_display'), { activeToken: null }, { merge: true });
       } catch (err) { console.error(err); }
     }
   };

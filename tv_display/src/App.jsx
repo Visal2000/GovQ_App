@@ -15,8 +15,8 @@ function App() {
     const unsub = onSnapshot(doc(db, 'queues', 'tv_display'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.activeToken) setActiveToken(data.activeToken);
-        if (data.nextTokens) setNextTokens(data.nextTokens);
+        if (data.activeToken !== undefined) setActiveToken(data.activeToken);
+        if (data.nextTokens !== undefined) setNextTokens(data.nextTokens);
       }
     }, (error) => {
       console.error("Firebase listen error:", error);

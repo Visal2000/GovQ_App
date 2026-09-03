@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   StreamSubscription<DocumentSnapshot>? _myTokenSubscription;
   StreamSubscription<QuerySnapshot>? _radarSubscription;
   StreamSubscription<DocumentSnapshot>? _metadataSubscription;
+  StreamSubscription<DocumentSnapshot>? _userSubscription;
   
   bool _isDelayActive = false;
   int _delayMinutes = 0;
@@ -42,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String _liveNextToken = '--';
   String _myToken = 'A-104';
   String _activeTokenStatus = 'waiting';
+  String? _appealStatus;
 
   final Map<String, List<String>> _departmentServices = {
     'Department of Registration of Persons (NIC)': [
@@ -92,7 +94,75 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
     });
 
+    _listenToUser();
     _checkExistingToken();
+  }
+
+  void _listenToUser() {
+    if (loggedInUserNIC.isEmpty) return;
+    
+    _userSubscription?.cancel();
+    _userSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(loggedInUserNIC)
+        .listen((snapshot) async {
+      if (snapshot.exists && snapshot.data() != null) {
+        final userData = snapshot.data() as Map<String, dynamic>;
+        
+        final prefs = await SharedPreferences.getInstance();
+        final lastNotifiedStatus = prefs.getString('lastNotifiedAppealStatus_$loggedInUserNIC');
+        final newAppealStatus = userData['appealStatus'];
+        
+        // Update local state early for UI
+        if (!mounted) return;
+        if (userData.containsKey('blockedUntil') && userData['blockedUntil'] != null) {
+          final blockedUntil = DateTime.parse(userData['blockedUntil']);
+          if (blockedUntil.isAfter(DateTime.now())) {
+            setState(() {
+              _isBlocked = true;
+              _blockedUntilDate = blockedUntil;
+              _appealStatus = newAppealStatus;
+            });
+          } else {
+             // Block expired naturally
+             FirebaseFirestore.instance.collection('users').doc(loggedInUserNIC).update({'blockedUntil': FieldValue.delete()});
+             setState(() { _isBlocked = false; _appealStatus = null; });
+          }
+        } else {
+          // No block found (maybe admin unblocked it)
+          setState(() {
+             _isBlocked = false;
+             _blockedUntilDate = null;
+             _appealStatus = newAppealStatus;
+          });
+        }
+        
+        // Notification for appeal outcome (compare with persistent storage)
+        if (newAppealStatus != lastNotifiedStatus) {
+          if (newAppealStatus == 'accepted') {
+            NotificationService().showSlotAvailableNotification(
+              'Appeal Accepted',
+              'Your ban has been lifted. You may book tokens again.'
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Your appeal was accepted! The ban has been lifted.'), backgroundColor: Colors.green),
+            );
+            await prefs.setString('lastNotifiedAppealStatus_$loggedInUserNIC', 'accepted');
+          } else if (newAppealStatus == 'rejected') {
+            NotificationService().showSlotAvailableNotification(
+              'Appeal Rejected',
+              'Your appeal was rejected. The 7-day ban remains.'
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Your appeal was rejected.'), backgroundColor: Colors.red),
+            );
+            await prefs.setString('lastNotifiedAppealStatus_$loggedInUserNIC', 'rejected');
+          } else if (newAppealStatus == 'pending') {
+            await prefs.setString('lastNotifiedAppealStatus_$loggedInUserNIC', 'pending');
+          }
+        }
+      }
+    });
   }
 
   Future<void> _checkExistingToken() async {
@@ -112,6 +182,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             setState(() {
               _isBlocked = true;
               _blockedUntilDate = blockedUntil;
+              _appealStatus = userData['appealStatus'];
             });
           } else {
              // Block expired
@@ -155,6 +226,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 _hasActiveToken = false;
                 _isBlocked = true;
                 _blockedUntilDate = blockedUntil;
+                _appealStatus = null;
              });
              
              if (mounted) {
@@ -274,6 +346,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _myTokenSubscription?.cancel();
     _radarSubscription?.cancel();
     _metadataSubscription?.cancel();
+    _userSubscription?.cancel();
     super.dispose();
   }
 
@@ -1054,6 +1127,82 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold),
                                 ),
                               ),
+                              const SizedBox(height: 24),
+                              
+                              if (_appealStatus == 'pending')
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.orange),
+                                  ),
+                                  child: const Text('Your appeal is currently under review by an administrator.', textAlign: TextAlign.center, style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                                )
+                              else if (_appealStatus == 'rejected')
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.danger.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.danger),
+                                  ),
+                                  child: const Text('Your appeal was rejected. The 7-day ban remains in effect.', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold)),
+                                )
+                              else
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) {
+                                        final controller = TextEditingController();
+                                        return AlertDialog(
+                                          title: const Text('Submit an Appeal'),
+                                          content: TextField(
+                                            controller: controller,
+                                            maxLines: 4,
+                                            decoration: const InputDecoration(
+                                              hintText: 'Please state the fair reason for missing your appointment and any evidence (links).',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                          ),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                                            ElevatedButton(
+                                              onPressed: () async {
+                                                if (controller.text.trim().isEmpty) return;
+                                                
+                                                final prefs = await SharedPreferences.getInstance();
+                                                await prefs.setString('lastNotifiedAppealStatus_$loggedInUserNIC', 'pending');
+                                                
+                                                await FirebaseFirestore.instance.collection('users').doc(loggedInUserNIC).update({
+                                                  'appealStatus': 'pending',
+                                                  'appealReason': controller.text.trim(),
+                                                });
+                                                setState(() {
+                                                  _appealStatus = 'pending';
+                                                });
+                                                if (mounted) {
+                                                  Navigator.pop(context);
+                                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Appeal submitted successfully.')));
+                                                }
+                                              },
+                                              child: const Text('Submit Appeal'),
+                                            )
+                                          ],
+                                        );
+                                      }
+                                    );
+                                  },
+                                  icon: const Icon(Icons.gavel),
+                                  label: const Text('Submit Appeal'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: AppTheme.primaryDark,
+                                    side: const BorderSide(color: AppTheme.primaryDark),
+                                  ),
+                                ),
+                                
                               const SizedBox(height: 24),
                               TextButton(
                                 onPressed: () async {

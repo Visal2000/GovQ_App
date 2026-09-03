@@ -19,7 +19,7 @@ const MainDisplay = ({ activeToken, nextTokens = [] }) => {
     }
 
     return () => clearTimeout(timer);
-  }, [activeToken.timestamp]);
+  }, [activeToken?.timestamp]);
 
   return (
     <div className="tv-main">
@@ -46,17 +46,30 @@ const MainDisplay = ({ activeToken, nextTokens = [] }) => {
           <img src="/logo.png" alt="" width="200" />
         </div>
         
-        <h1 style={{ fontSize: '10rem', color: 'var(--color-primary-dark)', margin: 0, lineHeight: 1 }}>
-          {activeToken.token}
-        </h1>
-        <div style={{ marginTop: '2rem', display: 'inline-block', background: 'var(--color-primary)', color: 'white', padding: '15px 40px', borderRadius: '50px' }}>
-          <p style={{ fontSize: '2.5rem', margin: 0, fontWeight: 800 }}>
-            Counter {activeToken.counter}: {activeToken.stageName}
-          </p>
-        </div>
-        <p style={{ marginTop: '2rem', fontSize: '1.5rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-          {activeToken.service}
-        </p>
+        {activeToken ? (
+          <>
+            <h1 style={{ fontSize: '10rem', color: 'var(--color-primary-dark)', margin: 0, lineHeight: 1 }}>
+              {activeToken.token}
+            </h1>
+            <div style={{ marginTop: '2rem', display: 'inline-block', background: 'var(--color-primary)', color: 'white', padding: '15px 40px', borderRadius: '50px' }}>
+              <p style={{ fontSize: '2.5rem', margin: 0, fontWeight: 800 }}>
+                Counter {activeToken.counter}: {activeToken.stageName}
+              </p>
+            </div>
+            <p style={{ marginTop: '2rem', fontSize: '1.5rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+              {activeToken.service}
+            </p>
+          </>
+        ) : (
+          <div style={{ padding: '4rem 0' }}>
+            <h1 style={{ fontSize: '4rem', color: 'var(--color-text-light)', margin: 0 }}>
+              Please Wait...
+            </h1>
+            <p style={{ marginTop: '1rem', fontSize: '1.5rem', color: 'var(--color-text-secondary)' }}>
+              Next token will be called shortly.
+            </p>
+          </div>
+        )}
       </div>
       
       {nextTokens.length > 0 && (
