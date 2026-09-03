@@ -8,7 +8,8 @@ import '../global.dart';
 
 class BookingScreen extends StatefulWidget {
   final String serviceName;
-  const BookingScreen({super.key, required this.serviceName});
+  final String? tokenToReschedule;
+  const BookingScreen({super.key, required this.serviceName, this.tokenToReschedule});
 
   @override
   State<BookingScreen> createState() => _BookingScreenState();
@@ -109,28 +110,42 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
       try {
         final tokensRef = FirebaseFirestore.instance.collection('tokens');
         
-        String prefix = 'A';
-        if (_selectedSlot!.contains('09:00 AM')) prefix = 'A';
-        else if (_selectedSlot!.contains('10:00 AM')) prefix = 'B';
-        else if (_selectedSlot!.contains('11:00 AM')) prefix = 'C';
-        else if (_selectedSlot!.contains('01:00 PM')) prefix = 'D';
-        else if (_selectedSlot!.contains('02:00 PM')) prefix = 'E';
+        String tokenStr;
+        String? fcmToken = await NotificationService().getFCMToken();
 
-        final querySnapshot = await tokensRef.where('slot', isEqualTo: _selectedSlot).get();
-        final count = querySnapshot.docs.length + 1;
-        final tokenStr = '$prefix-${count.toString().padLeft(3, '0')}';
+        if (widget.tokenToReschedule != null) {
+          tokenStr = widget.tokenToReschedule!;
+          await tokensRef.doc(tokenStr).update({
+            'date': _selectedDate!.toIso8601String(),
+            'slot': _selectedSlot,
+            'timestamp': FieldValue.serverTimestamp(),
+            'fcmToken': fcmToken,
+          });
+        } else {
+          String prefix = 'A';
+          if (_selectedSlot!.contains('09:00 AM')) prefix = 'A';
+          else if (_selectedSlot!.contains('10:00 AM')) prefix = 'B';
+          else if (_selectedSlot!.contains('11:00 AM')) prefix = 'C';
+          else if (_selectedSlot!.contains('01:00 PM')) prefix = 'D';
+          else if (_selectedSlot!.contains('02:00 PM')) prefix = 'E';
 
-        await tokensRef.doc(tokenStr).set({
-          'token': tokenStr,
-          'service': widget.serviceName,
-          'status': 'waiting',
-          'counter': '1',
-          'stageName': 'Document Submission',
-          'timestamp': FieldValue.serverTimestamp(),
-          'date': _selectedDate!.toIso8601String(),
-          'slot': _selectedSlot,
-          'userNIC': loggedInUserNIC,
-        });
+          final querySnapshot = await tokensRef.where('slot', isEqualTo: _selectedSlot).get();
+          final count = querySnapshot.docs.length + 1;
+          tokenStr = '$prefix-${count.toString().padLeft(3, '0')}';
+
+          await tokensRef.doc(tokenStr).set({
+            'token': tokenStr,
+            'service': widget.serviceName,
+            'status': 'waiting',
+            'counter': '1',
+            'stageName': 'Document Submission',
+            'timestamp': FieldValue.serverTimestamp(),
+            'date': _selectedDate!.toIso8601String(),
+            'slot': _selectedSlot,
+            'userNIC': loggedInUserNIC,
+            'fcmToken': fcmToken,
+          });
+        }
 
         // Trigger local phone notification
         await NotificationService().showBookingNotification(
@@ -166,7 +181,7 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: AppTheme.primaryDark),
-        title: const Text('Book Appointment', style: TextStyle(color: AppTheme.primaryDark, fontWeight: FontWeight.bold)),
+        title: Text(widget.tokenToReschedule != null ? 'Reschedule Appointment' : 'Book Appointment', style: const TextStyle(color: AppTheme.primaryDark, fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
       body: Stack(
@@ -444,7 +459,7 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
                     ),
                     child: _isBooking 
                       ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('CONFIRM BOOKING', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      : Text(widget.tokenToReschedule != null ? 'CONFIRM RESCHEDULE' : 'CONFIRM BOOKING', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                   ).animate().fade(delay: 400.ms).scale(begin: const Offset(0.9, 0.9)),
                   
                   const SizedBox(height: 24),

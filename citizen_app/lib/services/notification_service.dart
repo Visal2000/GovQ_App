@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 class NotificationService {
@@ -27,6 +28,46 @@ class NotificationService {
     await flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+
+    // Firebase Messaging Setup
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Listen to foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        _showForegroundNotification(message);
+      }
+    });
+  }
+
+  Future<String?> getFCMToken() async {
+    return await FirebaseMessaging.instance.getToken();
+  }
+
+  Future<void> _showForegroundNotification(RemoteMessage message) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'govq_push_channel',
+      'GovQ Updates',
+      channelDescription: 'Notifications for queue updates',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    await flutterLocalNotificationsPlugin.show(
+      id: message.hashCode,
+      title: message.notification?.title ?? 'GovQ Update',
+      body: message.notification?.body ?? '',
+      notificationDetails: platformChannelSpecifics,
+    );
   }
 
   Future<void> showBookingNotification(String tokenNumber, String serviceName, String slotTime) async {
