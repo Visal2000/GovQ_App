@@ -240,6 +240,64 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
+  void _rescheduleToken() async {
+    if (_bookedDate == null || _bookedSlot == null) return;
+    
+    try {
+      final parts = _bookedSlot!.split(' - ');
+      final startTimeStr = parts[0];
+      
+      final timeParts = startTimeStr.split(' ');
+      final hm = timeParts[0].split(':');
+      int hour = int.parse(hm[0]);
+      final int min = int.parse(hm[1]);
+      if (timeParts[1] == 'PM' && hour != 12) hour += 12;
+      if (timeParts[1] == 'AM' && hour == 12) hour = 0;
+      
+      final slotDateTime = DateTime(_bookedDate!.year, _bookedDate!.month, _bookedDate!.day, hour, min);
+      final now = DateTime.now();
+      
+      if (slotDateTime.difference(now).inHours < 4) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reschedule Failed: You cannot reschedule a token within 4 hours of the scheduled time.'),
+            backgroundColor: AppTheme.danger,
+          ),
+        );
+        return;
+      }
+      
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => BookingScreen(
+            serviceName: '$_selectedDepartment - $_selectedService',
+            tokenToReschedule: _myToken,
+          ),
+        ),
+      );
+
+      if (result is Map) {
+        setState(() {
+          _hasActiveToken = true;
+          _myToken = result['token'];
+          _bookedSlot = result['slot'];
+          if (result['date'] != null) {
+            _bookedDate = result['date'];
+          }
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Token successfully rescheduled!')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error preparing reschedule: $e');
+    }
+  }
+
   void _simulateNoShow() {
     setState(() {
       _hasActiveToken = false;
@@ -722,17 +780,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   ).animate().fade().scale(),
                                   
                               const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton(
-                                  onPressed: _cancelToken,
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white54),
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: _cancelToken,
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        side: const BorderSide(color: Colors.white54),
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                      ),
+                                      child: const Text('Cancel Token'),
+                                    ),
                                   ),
-                                  child: const Text('Cancel Token'),
-                                ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: _rescheduleToken,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.white,
+                                        foregroundColor: AppTheme.primaryColor,
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                      ),
+                                      child: const Text('Reschedule Slot'),
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 12),
                               Row(
