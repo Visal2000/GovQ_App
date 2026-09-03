@@ -197,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final snapshot = await FirebaseFirestore.instance
           .collection('tokens')
           .where('userNIC', isEqualTo: loggedInUserNIC)
-          .where('status', whereIn: ['waiting', 'serving', 'skipped'])
+          .where('status', whereIn: ['waiting', 'serving', 'skipped', 'late_arrival_pending'])
           .get();
 
       if (snapshot.docs.isNotEmpty) {
@@ -288,6 +288,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
              ScaffoldMessenger.of(context).showSnackBar(
                const SnackBar(
                  content: Text('Your token was marked as skipped. It remains valid today.'),
+                 backgroundColor: Colors.orange,
+               ),
+             );
+           }
+        }
+        
+        if (data['status'] == 'late_arrival_pending') {
+           setState(() {
+             _hasActiveToken = true; 
+           });
+           if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(
+                 content: Text('Late arrival request sent. Please wait for counter approval.'),
                  backgroundColor: Colors.orange,
                ),
              );
@@ -520,6 +534,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           backgroundColor: AppTheme.danger,
         ),
       );
+    }
+  }
+
+  void _markAsLateArrival() async {
+    try {
+      await FirebaseFirestore.instance.collection('tokens').doc(_myToken).update({
+        'status': 'late_arrival_pending'
+      });
+      setState(() {
+        _activeTokenStatus = 'late_arrival_pending';
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your late arrival has been sent to the counter for approval.'),
+            backgroundColor: AppTheme.accentColor,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error marking late arrival: $e");
     }
   }
 
@@ -971,7 +1006,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               const SizedBox(height: 24),
                               
                               if (isToday)
-                                if (!_isCheckedIn)
+                                if (_activeTokenStatus == 'skipped')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: _markAsLateArrival,
+                                      icon: const Icon(Icons.report_problem, color: Colors.white),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange.shade700,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 18),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        elevation: 5,
+                                      ),
+                                      label: const Text('I HAVE ARRIVED (LATE)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                                    ),
+                                  ).animate().fade().scale(delay: 200.ms)
+                                else if (_activeTokenStatus == 'late_arrival_pending')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: null,
+                                      icon: const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange.shade700,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 18),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        disabledBackgroundColor: Colors.orange.shade700.withOpacity(0.5),
+                                        elevation: 5,
+                                      ),
+                                      label: const Text('WAITING FOR APPROVAL...', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.white)),
+                                    ),
+                                  ).animate().fade().scale(delay: 200.ms)
+                                else if (!_isCheckedIn)
                                   SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton.icon(
