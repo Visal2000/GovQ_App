@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import GlassCard from '../components/GlassCard';
 import { db } from '../firebase';
 import { collection, onSnapshot, deleteDoc, doc, setDoc, deleteField } from 'firebase/firestore';
-import { Trash2, User, UserPlus, Settings, Shield } from 'lucide-react';
+import { Trash2, User, UserPlus, Settings, Shield, Calendar } from 'lucide-react';
 
 const SuperAdmin = () => {
   const [users, setUsers] = useState([]);
   const [staff, setStaff] = useState([]);
-  const [activeTab, setActiveTab] = useState('users'); // 'users', 'staff', 'appeals'
+  const [holidays, setHolidays] = useState([]);
+  const [activeTab, setActiveTab] = useState('users'); // 'users', 'staff', 'appeals', 'holidays'
+  
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayReason, setNewHolidayReason] = useState('');
   
   // New Staff Form
   const [newStaffUsername, setNewStaffUsername] = useState('');
@@ -24,7 +28,11 @@ const SuperAdmin = () => {
       setStaff(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    return () => { unsubUsers(); unsubStaff(); };
+    const unsubHolidays = onSnapshot(collection(db, 'holidays'), (snap) => {
+      setHolidays(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => { unsubUsers(); unsubStaff(); unsubHolidays(); };
   }, []);
 
   const handleDeleteUser = async (id) => {
@@ -36,6 +44,26 @@ const SuperAdmin = () => {
   const handleDeleteStaff = async (id) => {
     if (window.confirm('Are you sure you want to delete this staff login?')) {
       await deleteDoc(doc(db, 'staff', id));
+    }
+  };
+
+  const handleAddHoliday = async (e) => {
+    e.preventDefault();
+    if (!newHolidayDate) return;
+    
+    await setDoc(doc(db, 'holidays', newHolidayDate), {
+      reason: newHolidayReason || 'Public Holiday',
+      createdAt: Date.now()
+    });
+    
+    setNewHolidayDate('');
+    setNewHolidayReason('');
+    alert('Holiday added successfully!');
+  };
+
+  const handleDeleteHoliday = async (date) => {
+    if (window.confirm('Are you sure you want to remove this holiday?')) {
+      await deleteDoc(doc(db, 'holidays', date));
     }
   };
 
@@ -100,6 +128,12 @@ const SuperAdmin = () => {
           onClick={() => setActiveTab('appeals')}
         >
           <Shield size={18} /> Ban Appeals
+        </button>
+        <button 
+          className={`btn ${activeTab === 'holidays' ? 'btn-primary' : 'btn-secondary'}`} 
+          onClick={() => setActiveTab('holidays')}
+        >
+          <Calendar size={18} /> Holidays
         </button>
       </div>
 
@@ -239,6 +273,61 @@ const SuperAdmin = () => {
             )}
           </div>
         </GlassCard>
+      )}
+
+      {activeTab === 'holidays' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem' }}>
+          <GlassCard style={{ padding: '2rem' }}>
+            <h2 className="heading-md" style={{ marginBottom: '1.5rem' }}>Mark New Holiday</h2>
+            <form onSubmit={handleAddHoliday}>
+              <div className="input-group">
+                <label className="input-label">Select Date</label>
+                <input 
+                  type="date" 
+                  className="input-field" 
+                  required
+                  value={newHolidayDate}
+                  onChange={(e) => setNewHolidayDate(e.target.value)}
+                />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Reason (e.g. Public Holiday)</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  placeholder="Optional reason"
+                  value={newHolidayReason}
+                  onChange={(e) => setNewHolidayReason(e.target.value)}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }}>
+                <Calendar size={18} /> Mark Holiday
+              </button>
+            </form>
+          </GlassCard>
+
+          <GlassCard style={{ padding: '2rem' }}>
+            <h2 className="heading-md" style={{ marginBottom: '1.5rem' }}>Upcoming Holidays</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {holidays.sort((a,b) => a.id.localeCompare(b.id)).map(h => (
+                <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{h.id}</div>
+                    <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{h.reason}</div>
+                  </div>
+                  <button className="btn btn-danger" style={{ padding: '0.5rem' }} onClick={() => handleDeleteHoliday(h.id)}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+              {holidays.length === 0 && (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-light)' }}>
+                  No holidays marked.
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </div>
       )}
     </div>
   );

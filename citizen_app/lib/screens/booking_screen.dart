@@ -34,14 +34,29 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
   ];
   Map<String, int> _slotCounts = {};
   bool _isLoadingSlots = false;
+  List<String> _holidays = [];
 
   @override
   void initState() {
     super.initState();
+    _fetchHolidays();
     _bgController = AnimationController(
       vsync: this, 
       duration: const Duration(seconds: 15),
     )..repeat(reverse: true);
+  }
+
+  void _fetchHolidays() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('holidays').get();
+      if (mounted) {
+        setState(() {
+          _holidays = snap.docs.map((d) => d.id).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching holidays: $e");
+    }
   }
 
   @override
@@ -51,11 +66,37 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
   }
 
   void _selectDate() async {
+    DateTime initial = DateTime.now().add(const Duration(days: 1));
+    
+    // Find the next valid date for the initial date to prevent assertion errors
+    bool isValid(DateTime d) {
+      if (d.weekday == 6 || d.weekday == 7) return false;
+      final ds = "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
+      if (_holidays.contains(ds)) return false;
+      return true;
+    }
+    
+    while (!isValid(initial)) {
+      initial = initial.add(const Duration(days: 1));
+    }
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().add(const Duration(days: 1)),
+      initialDate: initial,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 30)),
+      selectableDayPredicate: (DateTime day) {
+        // Disable weekends (Saturday = 6, Sunday = 7)
+        if (day.weekday == 6 || day.weekday == 7) {
+          return false;
+        }
+        // Disable marked holidays
+        final dateString = "${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}";
+        if (_holidays.contains(dateString)) {
+          return false;
+        }
+        return true;
+      },
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
