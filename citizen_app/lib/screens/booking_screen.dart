@@ -24,8 +24,13 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
     '09:00 AM - 10:00 AM',
     '10:00 AM - 11:00 AM',
     '11:00 AM - 12:00 PM',
+    '12:00 PM - 01:00 PM',
     '01:00 PM - 02:00 PM',
     '02:00 PM - 03:00 PM',
+    '03:00 PM - 04:00 PM',
+    '04:00 PM - 05:00 PM',
+    '05:00 PM - 06:00 PM',
+    '06:00 PM - 07:00 PM',
   ];
   Map<String, int> _slotCounts = {};
   bool _isLoadingSlots = false;
@@ -369,8 +374,8 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
                                     if (_selectedDate!.year == DateTime.now().year &&
                                         _selectedDate!.month == DateTime.now().month &&
                                         _selectedDate!.day == DateTime.now().day) {
-                                      final startTimeStr = slot.split(' - ')[0];
-                                      final timeParts = startTimeStr.split(' ');
+                                      final endTimeStr = slot.split(' - ')[1];
+                                      final timeParts = endTimeStr.split(' ');
                                       final hm = timeParts[0].split(':');
                                       int hour = int.parse(hm[0]);
                                       if (timeParts[1] == 'PM' && hour != 12) hour += 12;
