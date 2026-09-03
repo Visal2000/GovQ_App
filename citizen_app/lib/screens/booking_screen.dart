@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/app_theme.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/notification_service.dart';
 import '../global.dart';
 
 class BookingScreen extends StatefulWidget {
@@ -18,13 +19,15 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
   String? _selectedSlot;
   late AnimationController _bgController;
 
-  final List<String> _slots = [
-    '09:00 AM - 10:00 AM (5 tokens left)',
-    '10:00 AM - 11:00 AM (12 tokens left)',
-    '11:00 AM - 12:00 PM (8 tokens left)',
-    '01:00 PM - 02:00 PM (15 tokens left)',
-    '02:00 PM - 03:00 PM (Available)',
+  final List<String> _baseSlots = [
+    '09:00 AM - 10:00 AM',
+    '10:00 AM - 11:00 AM',
+    '11:00 AM - 12:00 PM',
+    '01:00 PM - 02:00 PM',
+    '02:00 PM - 03:00 PM',
   ];
+  Map<String, int> _slotCounts = {};
+  bool _isLoadingSlots = false;
 
   @override
   void initState() {
@@ -65,6 +68,36 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
         _selectedDate = picked;
         _selectedSlot = null; // reset slot when date changes
       });
+      _fetchSlotCounts(picked);
+    }
+  }
+
+  void _fetchSlotCounts(DateTime date) async {
+    setState(() { _isLoadingSlots = true; });
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('tokens')
+          .where('date', isEqualTo: date.toIso8601String())
+          .get();
+      
+      Map<String, int> counts = {};
+      for (var doc in snapshot.docs) {
+        final slot = doc.data()['slot'] as String?;
+        if (slot != null) {
+          counts[slot] = (counts[slot] ?? 0) + 1;
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _slotCounts = counts;
+          _isLoadingSlots = false;
+        });
+      }
+    } catch(e) {
+      if (mounted) {
+        setState(() { _isLoadingSlots = false; });
+      }
     }
   }
 
@@ -98,6 +131,13 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
           'slot': _selectedSlot,
           'userNIC': loggedInUserNIC,
         });
+
+        // Trigger local phone notification
+        await NotificationService().showBookingNotification(
+          tokenStr, 
+          widget.serviceName, 
+          _selectedSlot!
+        );
 
         if (mounted) {
           Navigator.pop(context, {
@@ -297,49 +337,92 @@ class _BookingScreenState extends State<BookingScreen> with SingleTickerProvider
                                 ],
                               ),
                               const SizedBox(height: 20),
-                              ..._slots.map((slot) {
-                                final isSelected = _selectedSlot == slot;
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12.0),
-                                  child: InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedSlot = slot;
-                                      });
-                                    },
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                      decoration: BoxDecoration(
-                                        color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : Colors.white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor.withOpacity(0.5),
-                                          width: isSelected ? 2 : 1,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                            color: isSelected ? AppTheme.primaryColor : AppTheme.textSecondary.withOpacity(0.5),
+                              if (_isLoadingSlots)
+                                const Center(child: CircularProgressIndicator())
+                              else
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: _baseSlots.map((slot) {
+                                    final isSelected = _selectedSlot == slot;
+                                    final count = _slotCounts[slot] ?? 0;
+                                    final maxTokens = 50;
+                                    final available = maxTokens - count;
+                                    
+                                    // Lock passed slots
+                                    bool isLocked = false;
+                                    if (_selectedDate!.year == DateTime.now().year &&
+                                        _selectedDate!.month == DateTime.now().month &&
+                                        _selectedDate!.day == DateTime.now().day) {
+                                      final startTimeStr = slot.split(' - ')[0];
+                                      final timeParts = startTimeStr.split(' ');
+                                      final hm = timeParts[0].split(':');
+                                      int hour = int.parse(hm[0]);
+                                      if (timeParts[1] == 'PM' && hour != 12) hour += 12;
+                                      if (timeParts[1] == 'AM' && hour == 12) hour = 0;
+                                      
+                                      final slotDateTime = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, hour, 0);
+                                      if (slotDateTime.isBefore(DateTime.now())) {
+                                        isLocked = true;
+                                      }
+                                    }
+                                    
+                                    if (available <= 0) isLocked = true;
+
+                                    return InkWell(
+                                      onTap: isLocked ? null : () {
+                                        setState(() {
+                                          _selectedSlot = slot;
+                                        });
+                                      },
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Container(
+                                        width: MediaQuery.of(context).size.width / 2 - 45,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                        decoration: BoxDecoration(
+                                          color: isLocked ? Colors.grey.shade200 : (isSelected ? AppTheme.primaryColor : Colors.white),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor.withOpacity(0.5),
+                                            width: isSelected ? 2 : 1,
                                           ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
+                                          boxShadow: isLocked ? [] : [
+                                            BoxShadow(color: AppTheme.primaryColor.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
+                                          ],
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
                                               slot,
                                               style: TextStyle(
-                                                color: isSelected ? AppTheme.primaryDark : AppTheme.textSecondary,
-                                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                color: isLocked ? Colors.grey : (isSelected ? Colors.white : AppTheme.primaryDark),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(height: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: isLocked ? Colors.grey.shade300 : (isSelected ? Colors.white24 : AppTheme.primaryLight.withOpacity(0.1)),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                isLocked ? (available <= 0 ? 'Full' : 'Passed') : '$available slots left',
+                                                style: TextStyle(
+                                                  color: isLocked ? Colors.grey.shade600 : (isSelected ? Colors.white : AppTheme.primaryColor),
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ).animate().fade(delay: 300.ms).slideX(begin: 0.1);
-                              }),
+                                    ).animate().fade().scale(delay: 100.ms);
+                                  }).toList(),
+                                ),
                             ],
                           ),
                         ),

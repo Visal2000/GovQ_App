@@ -197,43 +197,47 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  void _cancelToken() {
-    // Simulate the 4-hour check
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel Token'),
-        content: const Text('Is this cancellation being made at least 4 hours before your booked time slot?'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Fail cancellation
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Cancellation Failed: You cannot cancel a token within 4 hours of the scheduled time.'),
-                  backgroundColor: AppTheme.danger,
-                ),
-              );
-            },
-            child: const Text('No (Less than 4 hours)', style: TextStyle(color: AppTheme.danger)),
+  void _cancelToken() async {
+    if (_bookedDate == null || _bookedSlot == null) return;
+    
+    try {
+      final parts = _bookedSlot!.split(' - ');
+      final startTimeStr = parts[0];
+      
+      final timeParts = startTimeStr.split(' ');
+      final hm = timeParts[0].split(':');
+      int hour = int.parse(hm[0]);
+      final int min = int.parse(hm[1]);
+      if (timeParts[1] == 'PM' && hour != 12) hour += 12;
+      if (timeParts[1] == 'AM' && hour == 12) hour = 0;
+      
+      final slotDateTime = DateTime(_bookedDate!.year, _bookedDate!.month, _bookedDate!.day, hour, min);
+      final now = DateTime.now();
+      
+      if (slotDateTime.difference(now).inHours < 4) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cancellation Failed: You cannot cancel a token within 4 hours of the scheduled time.'),
+            backgroundColor: AppTheme.danger,
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _hasActiveToken = false;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Token cancelled successfully.')),
-              );
-            },
-            child: const Text('Yes (Cancel Token)', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+        );
+        return;
+      }
+      
+      await FirebaseFirestore.instance.collection('tokens').doc(_myToken).update({'status': 'cancelled'});
+      
+      setState(() {
+        _hasActiveToken = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Token cancelled successfully.')),
+      );
+    } catch (e) {
+      debugPrint('Error cancelling token: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to cancel token.'), backgroundColor: AppTheme.danger),
+      );
+    }
   }
 
   void _simulateNoShow() {

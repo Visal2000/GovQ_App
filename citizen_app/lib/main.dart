@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'services/notification_service.dart';
 import 'global.dart';
 
 void main() async {
@@ -28,6 +29,10 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   loggedInUserNIC = prefs.getString('loggedInUserNIC') ?? '';
   loggedInUserName = prefs.getString('loggedInUserName') ?? '';
+
+  if (!kIsWeb) {
+    await NotificationService().init();
+  }
 
   runApp(GovQApp(isLoggedIn: loggedInUserNIC.isNotEmpty));
 }
