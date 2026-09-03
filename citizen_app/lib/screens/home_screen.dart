@@ -105,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _userSubscription = FirebaseFirestore.instance
         .collection('users')
         .doc(loggedInUserNIC)
+        .snapshots()
         .listen((snapshot) async {
       if (snapshot.exists && snapshot.data() != null) {
         final userData = snapshot.data() as Map<String, dynamic>;
