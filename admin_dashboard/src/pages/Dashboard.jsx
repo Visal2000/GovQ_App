@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import GlassCard from '../components/GlassCard';
-import { Play, Check, X, SkipForward, Users, Clock, AlertCircle } from 'lucide-react';
+import { Play, Check, X, SkipForward, Users, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, setDoc, onSnapshot, collection, query, where, orderBy, updateDoc, getDocs } from 'firebase/firestore';
 
@@ -58,6 +58,7 @@ const Dashboard = () => {
   const [activeSession, setActiveSession] = useState(null);
   const [lateTokenInput, setLateTokenInput] = useState('');
   const [lateTokensMsg, setLateTokensMsg] = useState([]);
+  const [pendingLateTokens, setPendingLateTokens] = useState([]);
   
   // Delay Broadcast State
   const [delayMinutes, setDelayMinutes] = useState('30');
@@ -109,7 +110,21 @@ const Dashboard = () => {
       console.error("Firestore Error in waitingTokens query: ", error);
     });
 
-    return () => unsub();
+    // Listen for late arrivals pending approval
+    const qLate = query(collection(db, 'tokens'), where('status', '==', 'late_arrival_pending'));
+    const unsubLate = onSnapshot(qLate, (snapshot) => {
+      let lateList = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => t.stageName === stageName);
+      
+      // Filter by the current slot so counter only sees late arrivals for their active hour
+      if (stageName === 'Document Submission') {
+        lateList = lateList.filter(t => t.slot && t.slot.startsWith(currentSlot));
+      }
+      setPendingLateTokens(lateList);
+    });
+
+    return () => { unsub(); unsubLate(); };
   }, [activeCounter, currentSlot]);
 
   // Keep TV Display's "Up Next" live-synced with our waiting tokens
@@ -228,6 +243,19 @@ const Dashboard = () => {
     } catch (err) {
       console.error(err);
       setLateTokensMsg(prev => [...prev, `Error: Could not process late arrival.`]);
+    }
+  };
+
+  const acceptPendingLateArrival = async (tokenDoc) => {
+    try {
+      await updateDoc(doc(db, 'tokens', tokenDoc.id), { 
+        status: 'waiting',
+        timestamp: Date.now() // This moves them to the end of the orderBy('timestamp', 'asc') queue for their slot
+      });
+      alert(`Token ${tokenDoc.token} accepted and added to the queue.`);
+    } catch (err) {
+      console.error(err);
+      alert('Error accepting late arrival.');
     }
   };
 
@@ -385,8 +413,30 @@ const Dashboard = () => {
           </GlassCard>
         ) : null}
 
+        {pendingLateTokens.length > 0 && (
+          <GlassCard style={{ padding: '1.5rem', marginTop: '1rem', border: '2px solid var(--color-warning)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', color: 'var(--color-warning)' }}>
+              <AlertTriangle size={24} />
+              <h4 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0 }}>Late Arrivals Pending Approval ({pendingLateTokens.length})</h4>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {pendingLateTokens.map(pt => (
+                <div key={pt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--color-text-dark)' }}>{pt.token}</div>
+                    <div className="text-sm" style={{ color: 'var(--color-text-light)' }}>{pt.service}</div>
+                  </div>
+                  <button className="btn btn-primary" onClick={() => acceptPendingLateArrival(pt)}>
+                    Accept (Add to Queue)
+                  </button>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        )}
+
         <GlassCard style={{ padding: '1.5rem', marginTop: '1rem' }}>
-          <h4 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: 600 }}>Late Arrivals Handling</h4>
+          <h4 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: 600 }}>Manual Late Arrivals Handling</h4>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <input 
               type="text" 
