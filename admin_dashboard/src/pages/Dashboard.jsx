@@ -29,7 +29,10 @@ const Dashboard = () => {
     if (hour === 12) return '12:00 PM - 01:00 PM';
     if (hour === 13) return '01:00 PM - 02:00 PM';
     if (hour === 14) return '02:00 PM - 03:00 PM';
-    return '03:00 PM - 04:00 PM';
+    if (hour === 15) return '03:00 PM - 04:00 PM';
+    if (hour === 16) return '04:00 PM - 05:00 PM';
+    if (hour === 17) return '05:00 PM - 06:00 PM';
+    return '06:00 PM - 07:00 PM';
   };
 
   const [currentSlot, setCurrentSlot] = useState(getCurrentSlot());
@@ -41,7 +44,10 @@ const Dashboard = () => {
     '12:00 PM - 01:00 PM',
     '01:00 PM - 02:00 PM',
     '02:00 PM - 03:00 PM',
-    '03:00 PM - 04:00 PM'
+    '03:00 PM - 04:00 PM',
+    '04:00 PM - 05:00 PM',
+    '05:00 PM - 06:00 PM',
+    '06:00 PM - 07:00 PM'
   ];
   
   // Single Counter Mode
@@ -52,6 +58,23 @@ const Dashboard = () => {
   const [activeSession, setActiveSession] = useState(null);
   const [lateTokenInput, setLateTokenInput] = useState('');
   const [lateTokensMsg, setLateTokensMsg] = useState([]);
+  
+  // Delay Broadcast State
+  const [delayMinutes, setDelayMinutes] = useState('30');
+  const [isDelayActive, setIsDelayActive] = useState(false);
+
+  // Listen to current delay status
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'queues', 'metadata'), (docSnap) => {
+      if (docSnap.exists()) {
+        setIsDelayActive(docSnap.data().delayActive || false);
+        if (docSnap.data().delayMinutes) {
+          setDelayMinutes(docSnap.data().delayMinutes.toString());
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const stageName = 'Document Submission';
@@ -207,6 +230,20 @@ const Dashboard = () => {
     }
   };
 
+  const handleBroadcastDelay = async (active) => {
+    try {
+      await setDoc(doc(db, 'queues', 'metadata'), {
+        delayActive: active,
+        delayMinutes: active ? parseInt(delayMinutes) : 0,
+        updatedAt: Date.now()
+      }, { merge: true });
+      alert(active ? `Delay broadcasted successfully.` : `Delay broadcast turned off.`);
+    } catch (error) {
+      console.error("Error broadcasting delay:", error);
+      alert("Error broadcasting delay.");
+    }
+  };
+
   const isFinalCounter = activeCounter.includes('Collection');
 
   return (
@@ -296,6 +333,48 @@ const Dashboard = () => {
           </button>
         </div>
       </GlassCard>
+
+      {/* Delay Broadcast Section */}
+      <div style={{ marginTop: '2rem' }}>
+        <h3 className="heading-md" style={{ marginBottom: '1rem', color: 'var(--color-danger)' }}>
+          <AlertCircle size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle' }} />
+          System Delay Broadcast
+        </h3>
+        <GlassCard style={{ padding: '2rem', border: '1px solid var(--color-danger)' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="input-group" style={{ flex: 1, minWidth: '200px', marginBottom: 0 }}>
+              <label className="input-label">Estimated Delay (Minutes)</label>
+              <select 
+                className="input-field" 
+                value={delayMinutes} 
+                onChange={(e) => setDelayMinutes(e.target.value)}
+                disabled={isDelayActive}
+              >
+                <option value="15">15 Minutes</option>
+                <option value="30">30 Minutes</option>
+                <option value="45">45 Minutes</option>
+                <option value="60">60 Minutes (1 Hour)</option>
+                <option value="120">120 Minutes (2 Hours)</option>
+              </select>
+            </div>
+            
+            {!isDelayActive ? (
+              <button className="btn btn-danger" style={{ padding: '0.8rem 2rem' }} onClick={() => handleBroadcastDelay(true)}>
+                Broadcast Delay to Citizens
+              </button>
+            ) : (
+              <button className="btn btn-secondary" style={{ padding: '0.8rem 2rem' }} onClick={() => handleBroadcastDelay(false)}>
+                Turn Off Delay Broadcast
+              </button>
+            )}
+          </div>
+          {isDelayActive && (
+            <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--color-danger)', color: 'white', borderRadius: '8px', opacity: 0.9 }}>
+              <strong>Status:</strong> Citizens are currently seeing a {delayMinutes}-minute delay warning on their apps.
+            </div>
+          )}
+        </GlassCard>
+      </div>
       
       <div style={{ marginTop: '2rem' }}>
         {waitingTokens.length === 0 && !activeSession ? (

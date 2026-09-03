@@ -33,10 +33,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late AnimationController _bgController;
   StreamSubscription<DocumentSnapshot>? _myTokenSubscription;
   StreamSubscription<QuerySnapshot>? _radarSubscription;
+  StreamSubscription<DocumentSnapshot>? _metadataSubscription;
+  
+  bool _isDelayActive = false;
+  int _delayMinutes = 0;
   
   String _liveServingToken = '--';
   String _liveNextToken = '--';
   String _myToken = 'A-104';
+  String _activeTokenStatus = 'waiting';
 
   final Map<String, List<String>> _departmentServices = {
     'Department of Registration of Persons (NIC)': [
@@ -69,6 +74,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           } else {
             _liveNextToken = '--';
           }
+        });
+      }
+    });
+
+    _metadataSubscription = FirebaseFirestore.instance
+        .collection('queues')
+        .doc('metadata')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()!;
+        setState(() {
+          _isDelayActive = data['delayActive'] ?? false;
+          _delayMinutes = data['delayMinutes'] ?? 0;
         });
       }
     });
@@ -106,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final snapshot = await FirebaseFirestore.instance
           .collection('tokens')
           .where('userNIC', isEqualTo: loggedInUserNIC)
-          .where('status', whereIn: ['waiting', 'serving'])
+          .where('status', whereIn: ['waiting', 'serving', 'skipped'])
           .get();
 
       if (snapshot.docs.isNotEmpty) {
@@ -155,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             _selectedService = data['service']?.split(' - ').last ?? '';
             _selectedDepartment = data['service']?.split(' - ').first ?? '';
             _bookedDate = tokenDate;
+            _activeTokenStatus = data['status'] ?? 'waiting';
           });
           _listenToMyToken(_myToken);
           _listenToOpenSlots();
@@ -180,9 +200,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         .listen((snap) {
       if (snap.exists && snap.data() != null) {
         final data = snap.data()!;
+        
+        // Update local status
+        if (data['status'] != null) {
+          setState(() { _activeTokenStatus = data['status']; });
+        }
+        
+        // Show status in state
+        if (data['status'] == 'skipped') {
+           setState(() {
+             _hasActiveToken = true; 
+           });
+           if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(
+                 content: Text('Your token was marked as skipped. It remains valid today.'),
+                 backgroundColor: Colors.orange,
+               ),
+             );
+           }
+        }
+        
         if (data['status'] == 'completed' || 
-            data['status'] == 'skipped' || 
-            data['status'] == 'cancelled') {
+            data['status'] == 'cancelled' ||
+            data['status'] == 'no-show') {
           setState(() {
             _hasActiveToken = false;
             _isCheckedIn = false;
@@ -232,6 +273,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _bgController.dispose();
     _myTokenSubscription?.cancel();
     _radarSubscription?.cancel();
+    _metadataSubscription?.cancel();
     super.dispose();
   }
 
@@ -382,19 +424,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  void _simulateNoShow() {
+  void _simulateNoShow() async {
+    // Exactly simulates the 11:59PM trigger by deleting token and banning user
+    await FirebaseFirestore.instance.collection('tokens').doc(_myToken).update({'status': 'no-show'});
+    final blockedUntil = DateTime.now().add(const Duration(days: 7));
+    await FirebaseFirestore.instance.collection('users').doc(loggedInUserNIC).update({
+      'blockedUntil': blockedUntil.toIso8601String()
+    });
+
     setState(() {
       _hasActiveToken = false;
       _isCheckedIn = false;
       _isBlocked = true;
+      _blockedUntilDate = blockedUntil;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Simulated No-Show: Account blocked for 7 days.'),
-        backgroundColor: AppTheme.danger,
-      ),
-    );
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Simulated No-Show: Account blocked for 7 days.'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
   }
+
 
   void _checkIn() {
     setState(() {
@@ -652,7 +706,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ],
                   ).animate().fade(duration: 600.ms).slideY(begin: -0.2),
                   
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
+                  
+                  if (_isDelayActive)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.amber.shade400, width: 2),
+                        boxShadow: [
+                          BoxShadow(color: Colors.amber.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('System Delay Alert', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'The office is experiencing a ~$_delayMinutes minute delay. Please plan your arrival accordingly. Your token remains completely valid.',
+                                  style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ).animate().fade().slideY(begin: -0.1),
 
                   if (_isLoadingToken)
                     const Center(
@@ -690,18 +777,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.white24,
+                                        color: _activeTokenStatus == 'skipped' ? Colors.orange.shade700 : Colors.white24,
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      child: const Row(
+                                      child: Row(
                                         children: [
-                                          Icon(Icons.circle, color: AppTheme.accentLight, size: 10),
-                                          SizedBox(width: 6),
-                                          Text('LIVE QUEUE', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                          Icon(
+                                            _activeTokenStatus == 'skipped' ? Icons.warning : Icons.circle, 
+                                            color: _activeTokenStatus == 'skipped' ? Colors.white : AppTheme.accentLight, 
+                                            size: 10
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            _activeTokenStatus == 'skipped' ? 'SKIPPED' : 'LIVE QUEUE', 
+                                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)
+                                          ),
                                         ],
                                       ),
-                                    ).animate(onPlay: (controller) => controller.repeat(reverse: true))
-                                     .fade(begin: 0.5, end: 1.0, duration: 1.seconds)
+                                    ).animate(
+                                      onPlay: (controller) => _activeTokenStatus == 'skipped' ? null : controller.repeat(reverse: true),
+                                    ).fade(begin: 0.5, end: 1.0, duration: 1.seconds)
                                   else
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -898,7 +993,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     child: TextButton(
                                       onPressed: _simulateNoShow,
                                       style: TextButton.styleFrom(foregroundColor: AppTheme.accentLight),
-                                      child: const Text('No-Show', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                                      child: const Text('Simulate Midnight No-Show', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
                                     ),
                                   ),
                                   Expanded(
@@ -910,6 +1005,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   ),
                                 ],
                               )
+
                             ],
                           ),
                         ),
