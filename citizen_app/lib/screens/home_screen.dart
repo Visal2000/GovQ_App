@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_screen.dart';
 import 'booking_screen.dart';
 import 'history_screen.dart';
+import '../services/notification_service.dart';
 import '../global.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String? _selectedService;
   bool _hasActiveToken = false;
   bool _isBlocked = false;
+  DateTime? _blockedUntilDate;
   bool _isCheckedIn = false;
   int _currentStage = 0;
   bool _isLoadingToken = true;
@@ -30,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String? _bookedSlot;
   late AnimationController _bgController;
   StreamSubscription<DocumentSnapshot>? _myTokenSubscription;
+  StreamSubscription<QuerySnapshot>? _radarSubscription;
   
   String _liveServingToken = '--';
   String _liveNextToken = '--';
@@ -80,6 +83,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
 
     try {
+      // 1. Check if user is blocked
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(loggedInUserNIC).get();
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        if (userData['blockedUntil'] != null) {
+          final blockedUntil = DateTime.parse(userData['blockedUntil']);
+          if (blockedUntil.isAfter(DateTime.now())) {
+            setState(() {
+              _isBlocked = true;
+              _blockedUntilDate = blockedUntil;
+            });
+          } else {
+             // Block expired
+             await FirebaseFirestore.instance.collection('users').doc(loggedInUserNIC).update({'blockedUntil': FieldValue.delete()});
+             setState(() { _isBlocked = false; });
+          }
+        }
+      }
+
+      // 2. Fetch active tokens
       final snapshot = await FirebaseFirestore.instance
           .collection('tokens')
           .where('userNIC', isEqualTo: loggedInUserNIC)
@@ -90,6 +113,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final activeDoc = snapshot.docs.first;
         final data = activeDoc.data();
         
+        DateTime? tokenDate;
+        if (data['date'] != null) {
+          tokenDate = DateTime.parse(data['date']);
+        }
+        
+        if (tokenDate != null) {
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final tDay = DateTime(tokenDate.year, tokenDate.month, tokenDate.day);
+          
+          if (tDay.isBefore(today)) {
+             // Token is from yesterday or earlier and was never completed! Auto-cancel as no-show at 11:59PM
+             await FirebaseFirestore.instance.collection('tokens').doc(activeDoc.id).update({'status': 'no-show'});
+             
+             final blockedUntil = now.add(const Duration(days: 7));
+             await FirebaseFirestore.instance.collection('users').doc(loggedInUserNIC).update({
+                'blockedUntil': blockedUntil.toIso8601String()
+             });
+             
+             setState(() {
+                _hasActiveToken = false;
+                _isBlocked = true;
+                _blockedUntilDate = blockedUntil;
+             });
+             
+             if (mounted) {
+               ScaffoldMessenger.of(context).showSnackBar(
+                 const SnackBar(content: Text('Account blocked for 7 days due to a missed appointment yesterday.'), backgroundColor: AppTheme.danger),
+               );
+             }
+             return; // Stop loading active token because it's cancelled
+          }
+        }
+        
         if (mounted) {
           setState(() {
             _hasActiveToken = true;
@@ -97,11 +154,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             _bookedSlot = data['slot'];
             _selectedService = data['service']?.split(' - ').last ?? '';
             _selectedDepartment = data['service']?.split(' - ').first ?? '';
-            if (data['date'] != null) {
-              _bookedDate = DateTime.parse(data['date']);
-            }
+            _bookedDate = tokenDate;
           });
           _listenToMyToken(_myToken);
+          _listenToOpenSlots();
         }
       }
     } catch (e) {
@@ -145,10 +201,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
+  void _listenToOpenSlots() {
+    if (_bookedDate == null || _selectedDepartment == null || _selectedService == null) return;
+    
+    _radarSubscription?.cancel();
+    _radarSubscription = FirebaseFirestore.instance
+        .collection('tokens')
+        .where('date', isEqualTo: _bookedDate!.toIso8601String())
+        .where('service', isEqualTo: '$_selectedDepartment - $_selectedService')
+        .snapshots()
+        .listen((snapshot) {
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.modified) {
+          final data = change.doc.data();
+          if (data != null && data['status'] == 'cancelled' && change.doc.id != _myToken) {
+            // A slot just opened up!
+            final slotStr = data['slot'] ?? 'a different time';
+            NotificationService().showSlotAvailableNotification(
+              '$_selectedDepartment - $_selectedService',
+              slotStr,
+            );
+          }
+        }
+      }
+    });
+  }
+
   @override
   void dispose() {
     _bgController.dispose();
     _myTokenSubscription?.cancel();
+    _radarSubscription?.cancel();
     super.dispose();
   }
 
@@ -188,6 +271,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       });
 
       _listenToMyToken(_myToken);
+      _listenToOpenSlots();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -442,8 +526,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             UserAccountsDrawerHeader(
               decoration: const BoxDecoration(color: AppTheme.primaryColor),
-              accountName: const Text('Visal Hewage', style: TextStyle(fontWeight: FontWeight.bold)),
-              accountEmail: const Text('visal@example.com'),
+              accountName: Text(loggedInUserName.isNotEmpty ? loggedInUserName : 'Citizen', style: const TextStyle(fontWeight: FontWeight.bold)),
+              accountEmail: Text(loggedInUserNIC.isNotEmpty ? loggedInUserNIC : 'No ID provided'),
               currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Icon(Icons.person, color: AppTheme.primaryColor, size: 40),
@@ -543,7 +627,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.8), fontSize: 16),
                             ),
                             Text(
-                              'Visal Hewage',
+                              loggedInUserName.isNotEmpty ? loggedInUserName : 'Citizen',
                               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                     color: AppTheme.primaryDark,
                                     fontWeight: FontWeight.bold,
@@ -869,20 +953,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   color: AppTheme.danger.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Text(
-                                  'Unblocks on: ${'7 days from now'}', // In a real app this would be a formatted date
-                                  style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold),
+                                child: Text(
+                                  'Unblocks on: ${_blockedUntilDate != null ? "${_blockedUntilDate!.year}-${_blockedUntilDate!.month.toString().padLeft(2, '0')}-${_blockedUntilDate!.day.toString().padLeft(2, '0')}" : "7 days from now"}',
+                                  style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold),
                                 ),
                               ),
                               const SizedBox(height: 24),
                               TextButton(
-                                onPressed: () {
+                                onPressed: () async {
+                                  // For testing: lift block immediately
+                                  await FirebaseFirestore.instance.collection('users').doc(loggedInUserNIC).update({'blockedUntil': FieldValue.delete()});
                                   setState(() {
                                     _isBlocked = false;
+                                    _blockedUntilDate = null;
                                   });
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Block lifted (Debug).')),
-                                  );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Block lifted (Debug).')),
+                                    );
+                                  }
                                 },
                                 child: const Text('Reset Block (Simulate Time Passed)', style: TextStyle(color: AppTheme.primaryColor)),
                               )

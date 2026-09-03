@@ -92,4 +92,27 @@ class NotificationService {
       payload: 'token_$tokenNumber',
     );
   }
+
+  Future<void> showSlotAvailableNotification(String serviceName, String slotTime) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'govq_radar_channel',
+      'GovQ Radar',
+      channelDescription: 'Notifications for opened slots',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+      icon: '@mipmap/ic_launcher',
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    await flutterLocalNotificationsPlugin.show(
+      id: 1, // distinct ID
+      title: 'New Slot Available! 🎟️',
+      body: 'A slot just opened up for $serviceName at $slotTime. Tap Reschedule to grab it!',
+      notificationDetails: platformChannelSpecifics,
+      payload: 'radar_$serviceName',
+    );
+  }
 }
